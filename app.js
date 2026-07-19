@@ -115,6 +115,17 @@ function formatCurrency(value) {
   return `${Number(value || 0).toLocaleString("ko-KR")}원`;
 }
 
+function formatAmountForList(value) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return "0원";
+  if (amount >= 10000) {
+    const man = amount / 10000;
+    const rounded = Number.isInteger(man) ? man : Number(man.toFixed(1));
+    return `${rounded.toLocaleString("ko-KR")}만원`;
+  }
+  return `${amount.toLocaleString("ko-KR")}원`;
+}
+
 function showToast(message) {
   const toast = document.getElementById("toast");
   toast.textContent = message;
@@ -521,7 +532,7 @@ function renderDashboard() {
   const today = getToday();
   const monthJobs = state.jobs.filter((job) => job.date && job.date.startsWith(month));
   const todayJobs = state.jobs.filter((job) => job.date === today);
-  const completedToday = todayJobs.filter((job) => job.status === "작업완료").length;
+  const todayCount = todayJobs.length;
 
   const monthlySales = monthJobs
     .filter((job) => job.jobType === "내 장비 작업")
@@ -539,7 +550,7 @@ function renderDashboard() {
     { title: "이번 달 매출", value: formatCurrency(monthlySales) },
     { title: "미수금", value: formatCurrency(outstandingReceivable) },
     { title: "미지급금", value: formatCurrency(outstandingPayable) },
-    { title: "오늘 완료 건수", value: `${completedToday}건` }
+    { title: "오늘 등록 건수", value: `${todayCount}건` }
   ].map((item) => `
     <div class="metric-card">
       <h4>${escapeHtml(item.title)}</h4>
@@ -548,8 +559,8 @@ function renderDashboard() {
   `).join("");
 
   const celebration = document.getElementById("celebrationMessage");
-  if (completedToday >= 2) {
-    celebration.textContent = "🎉 오늘도 열심히 뛰셨네요! VOO 화이팅!";
+  if (todayCount >= 2) {
+    celebration.textContent = "🎉 오늘도 작업을 등록해 주셨네요!";
     celebration.classList.remove("hidden");
   } else {
     celebration.textContent = "";
@@ -558,14 +569,21 @@ function renderDashboard() {
 
   const todayList = todayJobs.length
     ? todayJobs.map((job) => `
-      <article class="list-item">
-        <div>
-          <strong>${escapeHtml(job.siteName)}</strong>
-          <p>${escapeHtml(job.jobType)} · ${escapeHtml(job.customerName || "거래처 미입력")}${job.workTime ? ` · ${escapeHtml(job.workTime)}` : ""}</p>
-        </div>
-        <div class="value-block">
-          <span class="pill ${job.status === "작업완료" ? "completed" : "pending"}">${escapeHtml(job.status)}</span>
-          <p>${escapeHtml(job.workContent || "작업내용 없음")}</p>
+      <article class="list-item job-list-item">
+        <div class="job-card-main">
+          <div class="job-card-header">
+            <strong class="job-title">${escapeHtml(job.siteName || "현장 미입력")}</strong>
+          </div>
+          <div class="job-card-meta">
+            <span>📅 ${escapeHtml(job.date || "")}</span>
+            <span>🚛 ${escapeHtml(job.jobType)}</span>
+            ${job.workTime ? `<span>🕒 ${escapeHtml(job.workTime)}</span>` : ""}
+            <span>🏢 ${escapeHtml(job.customerName || "거래처 미입력")}</span>
+          </div>
+          <div class="job-card-content">
+            <span class="job-card-label">📝</span>
+            <p>${escapeHtml(job.workContent || "작업내용 없음")}</p>
+          </div>
         </div>
       </article>
     `).join("")
@@ -683,29 +701,36 @@ function downloadInvoice() {
 
 function renderJobList() {
   const items = state.jobs.slice(0, 20).map((job) => {
-    let amountText = "";
-    if (job.jobType === "내 장비 작업") {
-      amountText = `${formatCurrency(job.salesAmount || 0)} · ${job.receivableStatus}`;
-    } else {
-      amountText = `${formatCurrency(job.payoutAmount || 0)} · ${job.payoutStatus}`;
-    }
-
-    const isCompleted = job.status === "작업완료";
-    const actionLabel = isCompleted ? "진행중으로" : "작업완료";
-
-    const workTimeText = job.workTime ? ` · ${job.workTime}` : "";
+    const amountValue = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+    const amountText = formatAmountForList(amountValue);
+    const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
+    const statusClass = statusText === "수금완료" || statusText === "지급완료" ? "completed" : "pending";
 
     return `
-      <article class="list-item">
-        <div>
-          <strong>${escapeHtml(job.siteName)}</strong>
-          <p>${escapeHtml(job.date)} · ${escapeHtml(job.jobType)} · ${escapeHtml(job.customerName || job.providerName || "정보 없음")}${escapeHtml(workTimeText)}</p>
-          <p>${escapeHtml(job.workContent || "작업내용 없음")}</p>
+      <article class="list-item job-list-item">
+        <div class="job-card-main">
+          <div class="job-card-header">
+            <strong class="job-title">${escapeHtml(job.siteName || "현장 미입력")}</strong>
+          </div>
+          <div class="job-card-meta">
+            <span>📅 ${escapeHtml(job.date || "")}</span>
+            <span>🚛 ${escapeHtml(job.jobType)}</span>
+            ${job.workTime ? `<span>🕒 ${escapeHtml(job.workTime)}</span>` : ""}
+            <span>🏢 ${escapeHtml(job.customerName || job.providerName || "정보 없음")}</span>
+          </div>
+          <div class="job-card-content">
+            <span class="job-card-label">📝</span>
+            <p>${escapeHtml(job.workContent || "작업내용 없음")}</p>
+          </div>
+          <div class="job-card-finance">
+            <div class="job-amount-row">
+              <span class="job-card-label">💰</span>
+              <span class="job-amount">${escapeHtml(amountText)}</span>
+            </div>
+            <span class="pill ${statusClass}">${escapeHtml(statusText)}</span>
+          </div>
         </div>
-        <div class="value-block">
-          <span class="pill ${isCompleted ? "completed" : "pending"}">${escapeHtml(job.status)}</span>
-          <p>${escapeHtml(amountText)}</p>
-          <button class="tiny-btn" data-action="${isCompleted ? "reopen" : "complete"}" data-id="${escapeHtml(job.id)}">${actionLabel}</button>
+        <div class="job-card-actions">
           <button class="tiny-btn" data-action="invoice" data-id="${escapeHtml(job.id)}">거래명세서</button>
           <button class="tiny-btn danger" data-action="delete" data-id="${escapeHtml(job.id)}">삭제</button>
         </div>
@@ -737,35 +762,6 @@ function handleListActions(event) {
     saveState();
     renderAll();
     showToast("작업이 삭제되었습니다.");
-  }
-
-  if (action === "complete") {
-    const job = state.jobs.find((entry) => entry.id === id);
-    if (!job) return;
-
-    const isEquipment = job.jobType === "내 장비 작업";
-    if (isEquipment) {
-      const receivableCompleted = window.confirm("수금 완료?");
-      const invoiceIssued = window.confirm("계산서 발행?");
-      job.receivableStatus = receivableCompleted ? "수금완료" : "미수";
-      job.invoiceIssued = invoiceIssued ? "발행" : "미발행";
-    }
-
-    job.status = "작업완료";
-    job.completedAt = new Date().toISOString();
-    saveState();
-    renderAll();
-    showToast("작업이 완료 처리되었습니다.");
-  }
-
-  if (action === "reopen") {
-    const job = state.jobs.find((entry) => entry.id === id);
-    if (!job) return;
-    job.status = "진행중";
-    delete job.completedAt;
-    saveState();
-    renderAll();
-    showToast("작업 상태가 진행중으로 변경되었습니다.");
   }
 }
 
