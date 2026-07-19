@@ -1,0 +1,302 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#020617" />
+    <meta name="description" content="JEILCRANE PRO - 크레인 사업 운영용 모바일 PWA" />
+    <title>JEILCRANE PRO</title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">OFFLINE-FIRST PWA</p>
+          <h1>JEILCRANE PRO</h1>
+        </div>
+        <button id="backupBtn" class="ghost-btn">백업</button>
+      </header>
+
+      <main>
+        <section id="dashboardView" class="view active">
+          <div class="hero-card">
+            <div>
+              <p class="eyebrow">오늘의 운행 현황</p>
+              <h2>현장과 정산을 한 번에</h2>
+              <p>내 장비 작업과 배차 작업을 한 화면에서 관리합니다.</p>
+            </div>
+            <div class="hero-badge">크레인 운영</div>
+          </div>
+
+          <div id="dashboardMetrics" class="metric-grid"></div>
+          <div id="celebrationMessage" class="celebration hidden"></div>
+
+          <div class="card">
+            <div class="section-header">
+              <h3>오늘 작업</h3>
+              <span class="muted">오늘 등록/완료된 작업</span>
+            </div>
+            <div id="todayJobsList" class="stack-list"></div>
+          </div>
+        </section>
+
+        <section id="jobsView" class="view">
+          <div class="card">
+            <div class="section-header">
+              <h3>작업 등록</h3>
+              <span class="muted">현장 · 작업 · 정산</span>
+            </div>
+            <form id="jobForm" class="form-grid">
+              <div class="form-group">
+                <label for="jobDate">날짜</label>
+                <input id="jobDate" type="date" required />
+              </div>
+              <div class="form-group">
+                <label for="jobSite">현장명</label>
+                <input id="jobSite" list="siteOptions" placeholder="예: 삼성 공장" required />
+                <datalist id="siteOptions"></datalist>
+              </div>
+              <div class="form-group full">
+                <label for="jobWork">작업내용</label>
+                <input id="jobWork" placeholder="예: 5톤 크레인 장비 이동" />
+              </div>
+              <div class="form-group">
+                <label for="jobCustomer">거래처</label>
+                <div class="inline-actions">
+                  <select id="jobCustomer"></select>
+                  <button type="button" id="newCustomerBtn" class="ghost-btn compact">+ 새 거래처</button>
+                </div>
+                <div id="customerQuickAdd" class="customer-quick-add hidden">
+                  <div class="form-group">
+                    <label for="quickCustomerName">거래처명</label>
+                    <input id="quickCustomerName" placeholder="예: 한진건설" />
+                  </div>
+                  <div class="form-group">
+                    <label for="quickCustomerManager">담당자</label>
+                    <input id="quickCustomerManager" placeholder="예: 김과장" />
+                  </div>
+                  <div class="form-group">
+                    <label for="quickCustomerMemo">메모</label>
+                    <input id="quickCustomerMemo" placeholder="예: 현장 연락 우선" />
+                  </div>
+                  <div class="inline-actions">
+                    <button type="button" id="saveQuickCustomerBtn" class="primary-btn small">등록</button>
+                    <button type="button" id="cancelQuickCustomerBtn" class="ghost-btn">취소</button>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="jobType">작업구분</label>
+                <select id="jobType">
+                  <option value="내 장비 작업">내 장비 작업</option>
+                  <option value="배차 작업">배차 작업</option>
+                </select>
+              </div>
+
+              <div id="equipmentFields" class="form-grid full">
+                <div class="form-group">
+                  <label for="salesAmount">매출금액</label>
+                  <input id="salesAmount" type="number" min="0" placeholder="0" />
+                </div>
+                <div class="form-group">
+                  <label for="receivableStatus">수금상태</label>
+                  <select id="receivableStatus">
+                    <option value="미수">미수</option>
+                    <option value="수금완료">수금완료</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="invoiceIssued">계산서 발행 여부</label>
+                  <select id="invoiceIssued">
+                    <option value="미발행">미발행</option>
+                    <option value="발행">발행</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="dispatchFields" class="form-grid full hidden">
+                <div class="form-group">
+                  <label for="providerName">보낸 기사 또는 업체</label>
+                  <input id="providerName" list="providerOptions" placeholder="예: OO 기사님" />
+                  <datalist id="providerOptions"></datalist>
+                </div>
+                <div class="form-group">
+                  <label for="payoutAmount">지급금액</label>
+                  <input id="payoutAmount" type="number" min="0" placeholder="0" />
+                </div>
+                <div class="form-group">
+                  <label for="payoutStatus">지급상태</label>
+                  <select id="payoutStatus">
+                    <option value="미지급">미지급</option>
+                    <option value="지급완료">지급완료</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group full">
+                <label for="jobMemo">메모</label>
+                <textarea id="jobMemo" rows="3" placeholder="현장 메모를 남겨주세요."></textarea>
+              </div>
+              <button class="primary-btn full" type="submit">작업 저장</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="section-header">
+              <h3>작업 목록</h3>
+              <span class="muted">최근 등록순</span>
+            </div>
+            <div id="jobList" class="stack-list"></div>
+          </div>
+        </section>
+
+        <section id="customersView" class="view">
+          <div class="card">
+            <div class="section-header">
+              <h3>거래처 관리</h3>
+              <span class="muted">등록 · 조회 · 정산</span>
+            </div>
+            <form id="customerForm" class="form-grid">
+              <div class="form-group full">
+                <label for="customerName">거래처명</label>
+                <input id="customerName" placeholder="예: 한진건설" required />
+              </div>
+              <div class="form-group">
+                <label for="customerManager">담당자</label>
+                <input id="customerManager" placeholder="예: 김과장" />
+              </div>
+              <div class="form-group">
+                <label for="customerMemo">메모</label>
+                <input id="customerMemo" placeholder="예: 현장 연락 우선" />
+              </div>
+              <button class="primary-btn full" type="submit">거래처 등록</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="section-header">
+              <h3>거래처 목록</h3>
+              <span class="muted">총 작업건수 · 미수금</span>
+            </div>
+            <div id="customerList" class="stack-list"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-header">
+              <h3>거래처 상세</h3>
+              <span class="muted">최근 작업내역</span>
+            </div>
+            <div id="customerDetail" class="customer-detail"></div>
+          </div>
+        </section>
+
+        <section id="settlementView" class="view">
+          <div class="card">
+            <div class="section-header">
+              <h3>정산</h3>
+              <span class="muted">월별 조회</span>
+            </div>
+            <div class="form-group">
+              <label for="settlementMonth">조회 월</label>
+              <input id="settlementMonth" type="month" />
+            </div>
+            <div id="settlementSummary" class="metric-grid"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-header">
+              <h3>거래처별 정산</h3>
+              <span class="muted">총 매출 · 미수금</span>
+            </div>
+            <div id="settlementCustomers" class="stack-list"></div>
+          </div>
+
+          <div class="card">
+            <div class="section-header">
+              <h3>작업별 정산</h3>
+              <span class="muted">날짜 · 거래처 · 현장 · 금액</span>
+            </div>
+            <div id="settlementJobs" class="stack-list"></div>
+          </div>
+        </section>
+
+        <section id="settingsView" class="view">
+          <div class="card">
+            <div class="section-header">
+              <h3>회사 정보 설정</h3>
+              <span class="muted">명세서 상단에 자동 반영</span>
+            </div>
+            <form id="companySettingsForm" class="form-grid">
+              <div class="form-group full">
+                <label for="companyName">회사명</label>
+                <input id="companyName" placeholder="예: 제일크레인" />
+              </div>
+              <div class="form-group">
+                <label for="representativeName">대표자</label>
+                <input id="representativeName" placeholder="예: 홍길동" />
+              </div>
+              <div class="form-group">
+                <label for="businessNumber">사업자등록번호</label>
+                <input id="businessNumber" placeholder="예: 123-45-67890" />
+              </div>
+              <div class="form-group full">
+                <label for="companyAddress">주소</label>
+                <input id="companyAddress" placeholder="예: 부산시 해운대구" />
+              </div>
+              <div class="form-group">
+                <label for="companyPhone">전화번호</label>
+                <input id="companyPhone" placeholder="예: 051-000-0000" />
+              </div>
+              <div class="form-group">
+                <label for="companyEmail">이메일</label>
+                <input id="companyEmail" type="email" placeholder="예: info@jeilcrane.com" />
+              </div>
+              <button class="primary-btn full" type="submit">회사 정보 저장</button>
+            </form>
+          </div>
+        </section>
+
+        <section id="backupView" class="view">
+          <div class="card">
+            <div class="section-header">
+              <h3>백업 및 복구</h3>
+              <span class="muted">JSON 저장소</span>
+            </div>
+            <p class="muted">로컬 저장소에 저장된 작업 및 거래처 데이터를 JSON으로 백업하고 복구할 수 있습니다.</p>
+            <button id="exportBtn" class="primary-btn full">JSON 백업</button>
+            <label class="file-btn full" for="importFile">JSON 복구</label>
+            <input id="importFile" type="file" accept="application/json" />
+          </div>
+        </section>
+      </main>
+
+      <nav class="bottom-nav">
+        <button class="nav-btn active" data-view="dashboard">홈</button>
+        <button class="nav-btn" data-view="jobs">작업</button>
+        <button class="nav-btn" data-view="customers">거래처</button>
+        <button class="nav-btn" data-view="settlement">정산</button>
+        <button class="nav-btn" data-view="settings">설정</button>
+        <button class="nav-btn" data-view="backup">백업</button>
+      </nav>
+    </div>
+
+    <div id="invoiceModal" class="modal hidden" aria-hidden="true">
+      <div class="invoice-sheet">
+        <div class="invoice-actions">
+          <button id="backToMainBtn" class="back-btn">← 메인으로</button>
+          <div class="invoice-action-group">
+            <button id="downloadInvoiceBtn" class="primary-btn">PDF 저장</button>
+            <button id="printInvoiceBtn" class="ghost-btn">인쇄</button>
+            <button id="closeInvoiceBtn" class="ghost-btn">닫기</button>
+          </div>
+        </div>
+        <div id="invoiceContent" class="invoice-content"></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
