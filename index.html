@@ -228,10 +228,35 @@
 
           <div class="card">
             <div class="section-header">
-              <h3>작업별 정산</h3>
-              <span class="muted">날짜 · 거래처 · 현장 · 금액</span>
+              <h3>지출 관리</h3>
+              <span class="muted">주유 · 장비수리비 · 소모품 · 잡비</span>
             </div>
-            <div id="settlementJobs" class="stack-list"></div>
+            <form id="expenseForm" class="form-grid expense-form">
+              <div class="form-group">
+                <label for="expenseDate">날짜</label>
+                <input id="expenseDate" type="date" required />
+              </div>
+              <div class="form-group">
+                <label for="expenseCategory">지출항목</label>
+                <select id="expenseCategory">
+                  <option value="주유">주유</option>
+                  <option value="장비수리비">장비수리비</option>
+                  <option value="소모품">소모품</option>
+                  <option value="잡비">잡비</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="expenseAmount">금액</label>
+                <input id="expenseAmount" type="number" min="0" step="1000" placeholder="0" required />
+              </div>
+              <div class="form-group full">
+                <label for="expenseMemo">메모</label>
+                <input id="expenseMemo" placeholder="예: 차량 주유비" />
+              </div>
+              <button class="primary-btn full" type="submit">지출 저장</button>
+            </form>
+            <div id="expenseSummary" class="metric-grid compact-grid"></div>
+            <div id="expenseList" class="stack-list"></div>
           </div>
         </section>
 

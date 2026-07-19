@@ -1,4 +1,5 @@
 ﻿const STORAGE_KEY = "jeilcrane-pro-db-v2";
+const EXPENSE_CATEGORIES = ["주유", "장비수리비", "소모품", "잡비"];
 let selectedCustomerId = null;
 
 function getDefaultCompanyInfo() {
@@ -20,8 +21,21 @@ function createInitialState() {
   return {
     jobs: [],
     customers: [],
+    expenses: [],
     companyInfo: getDefaultCompanyInfo(),
     invoiceNumberState: { date: "", sequence: 0 }
+  };
+}
+
+function normalizeExpense(expense) {
+  const category = EXPENSE_CATEGORIES.includes(expense?.category) ? expense.category : "잡비";
+  return {
+    id: expense?.id || createId("expense"),
+    date: expense?.date || getToday(),
+    category,
+    amount: Number(expense?.amount || 0),
+    memo: expense?.memo || "",
+    createdAt: expense?.createdAt || new Date().toISOString()
   };
 }
 
@@ -76,6 +90,7 @@ function normalizeState(source) {
   return {
     jobs,
     customers: normalizeCustomers(base.customers, jobs),
+    expenses: Array.isArray(base.expenses) ? base.expenses.map(normalizeExpense) : [],
     companyInfo: {
       ...getDefaultCompanyInfo(),
       ...(base.companyInfo || {})
@@ -503,28 +518,85 @@ function renderSettlementView() {
 
   document.getElementById("settlementCustomers").innerHTML = customerItems || '<p class="muted">이 월의 거래처 정산 내역이 없습니다.</p>';
 
-  const jobItems = filteredJobs
+  const monthlyExpenses = state.expenses.filter((expense) => expense.date && expense.date.startsWith(selectedMonth));
+  const totalExpenses = monthlyExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const categoryTotals = EXPENSE_CATEGORIES.map((category) => ({
+    category,
+    total: monthlyExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
+  }));
+
+  document.getElementById("expenseSummary").innerHTML = [
+    { title: "이번 달 총지출", value: formatCurrency(totalExpenses) },
+    ...categoryTotals.map((item) => ({ title: item.category, value: formatCurrency(item.total) }))
+  ].map((item) => `
+    <div class="metric-card">
+      <h4>${escapeHtml(item.title)}</h4>
+      <strong>${escapeHtml(item.value)}</strong>
+    </div>
+  `).join("");
+
+  const expenseItems = monthlyExpenses
     .slice()
     .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-    .map((job) => {
-      const amount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
-      const paymentStatus = job.jobType === "내 장비 작업" ? job.receivableStatus : job.payoutStatus;
-      return `
-        <article class="list-item">
-          <div>
-            <strong>${escapeHtml(job.siteName || "현장 미입력")}</strong>
-            <p>${escapeHtml(job.date)} · ${escapeHtml(job.customerName || job.providerName || "정보 없음")}</p>
+    .map((expense) => `
+      <article class="list-item expense-list-item">
+        <div class="expense-item-main">
+          <div class="expense-item-top">
+            <strong>${escapeHtml(expense.category || "지출")}</strong>
+            <span class="expense-amount">${escapeHtml(formatCurrency(expense.amount || 0))}</span>
           </div>
-          <div class="value-block">
-            <span class="pill">${escapeHtml(paymentStatus || "미정")}</span>
-            <p>${escapeHtml(formatCurrency(amount))}</p>
-          </div>
-        </article>
-      `;
-    })
+          <p>${escapeHtml(expense.date || "")}${expense.memo ? ` · ${escapeHtml(expense.memo)}` : ""}</p>
+        </div>
+        <button class="tiny-btn danger" data-action="delete-expense" data-id="${escapeHtml(expense.id)}">삭제</button>
+      </article>
+    `)
     .join("");
 
-  document.getElementById("settlementJobs").innerHTML = jobItems || '<p class="muted">이 월의 작업 내역이 없습니다.</p>';
+  document.getElementById("expenseList").innerHTML = expenseItems || '<p class="muted">이 월의 지출 내역이 없습니다.</p>';
+}
+
+function bindExpenseForm() {
+  const form = document.getElementById("expenseForm");
+  if (!form) return;
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const date = document.getElementById("expenseDate").value;
+    const category = document.getElementById("expenseCategory").value;
+    const amount = Number(document.getElementById("expenseAmount").value || 0);
+    const memo = document.getElementById("expenseMemo").value.trim();
+
+    if (!date) {
+      showToast("날짜를 입력해주세요.");
+      return;
+    }
+
+    if (!category) {
+      showToast("지출항목을 선택해주세요.");
+      return;
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showToast("금액은 0보다 커야 합니다.");
+      return;
+    }
+
+    state.expenses.unshift({
+      id: createId("expense"),
+      date,
+      category,
+      amount,
+      memo,
+      createdAt: new Date().toISOString()
+    });
+
+    saveState();
+    renderAll();
+    form.reset();
+    document.getElementById("expenseDate").value = date;
+    document.getElementById("expenseCategory").value = category;
+    showToast("지출이 저장되었습니다.");
+  });
 }
 
 function renderDashboard() {
@@ -545,9 +617,14 @@ function renderDashboard() {
   const outstandingPayable = state.jobs
     .filter((job) => job.jobType === "배차 작업")
     .reduce((sum, job) => sum + (job.payoutStatus === "미지급" ? Number(job.payoutAmount || 0) : 0), 0);
+  const monthlyExpenses = state.expenses.filter((expense) => expense.date && expense.date.startsWith(month));
+  const totalExpenses = monthlyExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const netProfit = monthlySales - totalExpenses;
 
   document.getElementById("dashboardMetrics").innerHTML = [
     { title: "이번 달 매출", value: formatCurrency(monthlySales) },
+    { title: "이번 달 지출", value: formatCurrency(totalExpenses) },
+    { title: "순이익", value: formatCurrency(netProfit) },
     { title: "미수금", value: formatCurrency(outstandingReceivable) },
     { title: "미지급금", value: formatCurrency(outstandingPayable) },
     { title: "오늘 등록 건수", value: `${todayCount}건` }
@@ -763,6 +840,13 @@ function handleListActions(event) {
     renderAll();
     showToast("작업이 삭제되었습니다.");
   }
+
+  if (action === "delete-expense") {
+    state.expenses = state.expenses.filter((expense) => expense.id !== id);
+    saveState();
+    renderAll();
+    showToast("지출이 삭제되었습니다.");
+  }
 }
 
 function exportBackup() {
@@ -785,6 +869,7 @@ function importBackup(event) {
       const imported = JSON.parse(reader.result);
       state.jobs = Array.isArray(imported.jobs) ? imported.jobs : state.jobs;
       state.customers = normalizeCustomers(imported.customers, state.jobs);
+      state.expenses = Array.isArray(imported.expenses) ? imported.expenses.map(normalizeExpense) : [];
       saveState();
       renderAll();
       showToast("데이터를 복구했습니다.");
@@ -821,6 +906,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindForm();
   bindSettingsForm();
   bindCustomerForms();
+  bindExpenseForm();
   document.addEventListener("click", handleListActions);
   document.getElementById("backupBtn").addEventListener("click", exportBackup);
   document.getElementById("exportBtn").addEventListener("click", exportBackup);
