@@ -1,5 +1,5 @@
 ﻿const STORAGE_KEY = "jeilcrane-pro-db-v2";
-const EXPENSE_CATEGORIES = ["주유", "장비수리비", "소모품", "잡비"];
+const EXPENSE_CATEGORIES = ["주유", "장비수리", "소모품", "식비", "보험", "기타"];
 let selectedCustomerId = null;
 
 function getDefaultCompanyInfo() {
@@ -28,7 +28,7 @@ function createInitialState() {
 }
 
 function normalizeExpense(expense) {
-  const category = EXPENSE_CATEGORIES.includes(expense?.category) ? expense.category : "잡비";
+  const category = EXPENSE_CATEGORIES.includes(expense?.category) ? expense.category : "기타";
   return {
     id: expense?.id || createId("expense"),
     date: expense?.date || getToday(),
