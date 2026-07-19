@@ -68,7 +68,8 @@ function normalizeState(source) {
         status: job.status || "진행중",
         receivableStatus: job.receivableStatus || "미수",
         invoiceIssued: job.invoiceIssued || "미발행",
-        payoutStatus: job.payoutStatus || "미지급"
+        payoutStatus: job.payoutStatus || "미지급",
+        workTime: job.workTime || ""
       }))
     : [];
 
@@ -193,6 +194,7 @@ function bindForm() {
       date: document.getElementById("jobDate").value || getToday(),
       siteName,
       workContent: document.getElementById("jobWork").value.trim(),
+      workTime: document.getElementById("jobWorkTime").value.trim(),
       customerName: selectedCustomer ? selectedCustomer.name : "",
       customerId: selectedCustomer ? selectedCustomer.id : "",
       jobType,
@@ -559,7 +561,7 @@ function renderDashboard() {
       <article class="list-item">
         <div>
           <strong>${escapeHtml(job.siteName)}</strong>
-          <p>${escapeHtml(job.jobType)} · ${escapeHtml(job.customerName || "거래처 미입력")}</p>
+          <p>${escapeHtml(job.jobType)} · ${escapeHtml(job.customerName || "거래처 미입력")}${job.workTime ? ` · ${escapeHtml(job.workTime)}` : ""}</p>
         </div>
         <div class="value-block">
           <span class="pill ${job.status === "작업완료" ? "completed" : "pending"}">${escapeHtml(job.status)}</span>
@@ -691,11 +693,13 @@ function renderJobList() {
     const isCompleted = job.status === "작업완료";
     const actionLabel = isCompleted ? "진행중으로" : "작업완료";
 
+    const workTimeText = job.workTime ? ` · ${job.workTime}` : "";
+
     return `
       <article class="list-item">
         <div>
           <strong>${escapeHtml(job.siteName)}</strong>
-          <p>${escapeHtml(job.date)} · ${escapeHtml(job.jobType)} · ${escapeHtml(job.customerName || job.providerName || "정보 없음")}</p>
+          <p>${escapeHtml(job.date)} · ${escapeHtml(job.jobType)} · ${escapeHtml(job.customerName || job.providerName || "정보 없음")}${escapeHtml(workTimeText)}</p>
           <p>${escapeHtml(job.workContent || "작업내용 없음")}</p>
         </div>
         <div class="value-block">
