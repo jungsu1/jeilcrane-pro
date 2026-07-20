@@ -407,11 +407,12 @@ function bindForm() {
 }
 
 function buildDatalists() {
-  const siteValues = [...new Set(state.jobs.map((job) => job.siteName).filter(Boolean))];
   const providerValues = [...new Set(state.jobs.map((job) => job.providerName).filter(Boolean))];
 
-  document.getElementById("siteOptions").innerHTML = siteValues.map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
-  document.getElementById("providerOptions").innerHTML = providerValues.map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
+  const providerOptions = document.getElementById("providerOptions");
+  if (providerOptions) {
+    providerOptions.innerHTML = providerValues.map((value) => `<option value="${escapeHtml(value)}"></option>`).join("");
+  }
 }
 
 function buildCustomerSelectOptions() {
