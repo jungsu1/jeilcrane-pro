@@ -853,17 +853,31 @@ function buildSettlementStatementHtml(report) {
   const periodLabel = report.filters.period === "custom"
     ? `${report.filters.range?.startKey || ""}${report.filters.range?.startKey && report.filters.range?.endKey ? " ~ " : ""}${report.filters.range?.endKey || ""}`
     : (report.filters.period === "this-month" ? "이번 달" : report.filters.period === "last-month" ? "지난 달" : report.filters.period === "this-year" ? "올해" : report.filters.period === "all" ? "전체" : "기간 선택");
-  const rows = report.jobs
+
+  const issueDate = getToday();
+  const customerRepresentative = selectedCustomer?.representativeName || selectedCustomer?.representative || selectedCustomer?.ceoName || "";
+  const customerPhone = selectedCustomer?.phone || selectedCustomer?.tel || selectedCustomer?.telephone || "";
+
+  const sortedJobs = report.jobs
     .slice()
-    .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
-    .map((job) => `
-      <tr>
-        <td>${escapeHtml(job.date || "")}</td>
-        <td>${escapeHtml(job.siteName || "현장 미입력")}</td>
-        <td>${escapeHtml(job.workContent || "작업내용 없음")}</td>
-        <td>${escapeHtml(formatCurrency(job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0)))}</td>
-      </tr>
-    `)
+    .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+  const rows = sortedJobs
+    .map((job) => {
+      const amount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+      const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
+      const isCompleted = statusText === "수금완료" || statusText === "지급완료";
+
+      return `
+        <tr class="statement-row">
+          <td class="date-cell">${escapeHtml(job.date || "")}</td>
+          <td class="site-cell">${escapeHtml(job.siteName || "현장 미입력")}</td>
+          <td class="work-cell">${escapeHtml(job.workContent || "작업내용 없음")}</td>
+          <td class="amount-cell">${escapeHtml(formatCurrency(amount))}</td>
+          <td class="status-cell ${isCompleted ? "is-done" : "is-pending"}">${escapeHtml(statusText)}</td>
+        </tr>
+      `;
+    })
     .join("");
 
   if (!rows) {
@@ -874,40 +888,247 @@ function buildSettlementStatementHtml(report) {
     `;
   }
 
-  const totalAmount = report.jobs.reduce((sum, job) => sum + (job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0)), 0);
+  const totalAmount = sortedJobs.reduce((sum, job) => sum + (job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0)), 0);
+  const collectedAmount = sortedJobs.reduce((sum, job) => {
+    const amount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+    const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
+    return (statusText === "수금완료" || statusText === "지급완료") ? sum + amount : sum;
+  }, 0);
+  const outstandingAmount = totalAmount - collectedAmount;
 
   return `
-    <div class="invoice-content">
-      <div class="invoice-header">
-        <div class="invoice-title-block">
-          <h2 class="invoice-title">거래내역서</h2>
-          <div class="invoice-meta-line">
-            <span>회사명: ${escapeHtml(companyInfo.companyName || "제일크레인")}</span>
-            <span>조회기간: ${escapeHtml(periodLabel)}</span>
-          </div>
-        </div>
+      <div class="report-scale-wrapper">
+        <article class="report-document settlement-a4-document" aria-label="거래내역서 A4 문서">
+          <header class="statement-header">
+            <h2>거래내역서</h2>
+            <div class="statement-meta">
+              <div>발행일자: ${escapeHtml(issueDate)}</div>
+              <div>조회기간: ${escapeHtml(periodLabel)}</div>
+            </div>
+          </header>
+
+          <section class="statement-parties">
+            <div class="statement-party-box">
+              <h3>공급자 정보</h3>
+              <div>상호: ${escapeHtml(companyInfo.companyName || "제일크레인")}</div>
+              <div>대표자: ${escapeHtml(companyInfo.representativeName || "-")}</div>
+              <div>연락처: ${escapeHtml(companyInfo.phone || "-")}</div>
+              ${companyInfo.businessNumber ? `<div>사업자번호: ${escapeHtml(companyInfo.businessNumber)}</div>` : ""}
+              ${companyInfo.address ? `<div>주소: ${escapeHtml(companyInfo.address)}</div>` : ""}
+            </div>
+            <div class="statement-party-box">
+              <h3>공급받는 자 정보</h3>
+              <div>거래처명: ${escapeHtml(customerName)}</div>
+              ${customerRepresentative ? `<div>대표자: ${escapeHtml(customerRepresentative)}</div>` : ""}
+              ${customerPhone ? `<div>연락처: ${escapeHtml(customerPhone)}</div>` : ""}
+            </div>
+          </section>
+
+          <table class="settlement-a4-table">
+            <colgroup>
+              <col style="width:18%" />
+              <col style="width:25%" />
+              <col style="width:32%" />
+              <col style="width:17%" />
+              <col style="width:8%" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>현장명</th>
+                <th>작업내용</th>
+                <th>금액</th>
+                <th>수금상태</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+
+          <footer class="statement-total-box">
+            <div><span>총 거래금액</span><strong>${escapeHtml(formatCurrency(totalAmount))}</strong></div>
+            <div><span>수금완료 금액</span><strong>${escapeHtml(formatCurrency(collectedAmount))}</strong></div>
+            <div><span>미수금</span><strong>${escapeHtml(formatCurrency(outstandingAmount))}</strong></div>
+          </footer>
+        </article>
       </div>
-      <div class="invoice-company">
-        <div class="invoice-company-info">
-          <div class="invoice-company-item">거래처명: ${escapeHtml(customerName)}</div>
-          <div class="invoice-company-item">대표자: ${escapeHtml(companyInfo.representativeName || "정보 없음")}</div>
-          <div class="invoice-company-item">전화번호: ${escapeHtml(companyInfo.phone || "정보 없음")}</div>
-        </div>
-      </div>
-      <table class="settlement-statement-table">
-        <thead>
-          <tr>
-            <th>날짜</th>
-            <th>현장명</th>
-            <th>작업내용</th>
-            <th>금액</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <p class="invoice-total">작업건수: ${escapeHtml(String(report.jobs.length))}건 / 합계금액: ${escapeHtml(formatCurrency(totalAmount))}</p>
-    </div>
   `;
+}
+
+function updateSettlementStatementPreviewScale() {
+  const viewport = document.querySelector("#settlementStatementContent.report-preview-scroll");
+  const scaleWrap = document.querySelector("#settlementStatementContent .report-scale-wrapper");
+  const documentNode = document.querySelector("#settlementStatementContent .report-document");
+  if (!viewport || !scaleWrap || !documentNode) return;
+
+  documentNode.style.transform = "scale(1)";
+  const availableWidth = Math.max(viewport.clientWidth - 4, 320);
+  const documentWidth = documentNode.offsetWidth || 1;
+  const scale = Math.min(1, availableWidth / documentWidth);
+
+  documentNode.style.transformOrigin = "top center";
+  documentNode.style.transform = `scale(${scale})`;
+
+  const scaledHeight = Math.ceil(documentNode.scrollHeight * scale);
+  scaleWrap.style.height = `${Math.max(320, scaledHeight)}px`;
+}
+
+function refreshSettlementStatementIfOpen() {
+  const modal = document.getElementById("settlementStatementModal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  if (!currentSettlementReport || !Array.isArray(currentSettlementReport.jobs) || currentSettlementReport.jobs.length === 0) {
+    closeSettlementStatement();
+    return;
+  }
+
+  document.getElementById("settlementStatementContent").innerHTML = buildSettlementStatementHtml(currentSettlementReport);
+  updateSettlementStatementPreviewScale();
+}
+
+function getSettlementPeriodLabel(report) {
+  return report.filters.period === "custom"
+    ? `${report.filters.range?.startKey || ""}${report.filters.range?.startKey && report.filters.range?.endKey ? " ~ " : ""}${report.filters.range?.endKey || ""}`
+    : (report.filters.period === "this-month" ? "이번 달" : report.filters.period === "last-month" ? "지난 달" : report.filters.period === "this-year" ? "올해" : report.filters.period === "all" ? "전체" : "기간 선택");
+}
+
+function getSettlementFileMonth(report) {
+  if (report.filters.period === "custom" && report.filters.range?.startKey) {
+    return report.filters.range.startKey.slice(0, 7);
+  }
+  return getCurrentMonth();
+}
+
+function sanitizeFileNamePart(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+function getSettlementPdfFileName(report) {
+  const selectedCustomer = state.customers.find((customer) => customer.id === report.filters.customerId);
+  const customerName = sanitizeFileNamePart(selectedCustomer?.name || report.filters.customerName || "거래처");
+  const monthPart = sanitizeFileNamePart(getSettlementFileMonth(report));
+  return `거래내역서_${customerName || "거래처"}_${monthPart || getCurrentMonth()}.pdf`;
+}
+
+function ensureJsPdfReady() {
+  const jsPdfApi = window.jspdf?.jsPDF;
+  if (!jsPdfApi) {
+    throw new Error("jsPDF를 불러오지 못했습니다.");
+  }
+  return jsPdfApi;
+}
+
+function ensureHtml2CanvasReady() {
+  if (!window.html2canvas) {
+    throw new Error("html2canvas를 불러오지 못했습니다.");
+  }
+  return window.html2canvas;
+}
+
+async function createSettlementPdfDocument(report) {
+  const jsPDF = ensureJsPdfReady();
+  const html2canvas = ensureHtml2CanvasReady();
+  const documentNode = document.querySelector("#settlementStatementContent .report-document");
+  if (!documentNode) {
+    throw new Error("거래내역서 문서를 찾지 못했습니다.");
+  }
+  const captureHost = document.createElement("div");
+  captureHost.style.position = "fixed";
+  captureHost.style.left = "-10000px";
+  captureHost.style.top = "0";
+  captureHost.style.background = "#ffffff";
+  captureHost.style.padding = "0";
+  captureHost.style.margin = "0";
+  captureHost.style.zIndex = "-1";
+
+  const captureNode = documentNode.cloneNode(true);
+  captureNode.style.transform = "none";
+  captureNode.style.transformOrigin = "top left";
+  captureNode.style.width = "210mm";
+  captureNode.style.minHeight = "297mm";
+  captureNode.style.height = "auto";
+  captureNode.style.margin = "0";
+  captureNode.style.border = "none";
+  captureNode.style.boxShadow = "none";
+  captureNode.style.overflow = "visible";
+
+  captureHost.appendChild(captureNode);
+  document.body.appendChild(captureHost);
+
+  let canvas;
+  try {
+    canvas = await html2canvas(captureNode, {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      useCORS: true
+    });
+  } finally {
+    captureHost.remove();
+  }
+
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pdfWidth = 210;
+  const pdfHeight = 297;
+  const imageHeight = (canvas.height * pdfWidth) / canvas.width;
+
+  if (imageHeight <= pdfHeight + 1.5) {
+    const imgData = canvas.toDataURL("image/png");
+    doc.addImage(imgData, "PNG", 0, 0, pdfWidth, Math.min(imageHeight, pdfHeight));
+    return { doc, fileName: getSettlementPdfFileName(report) };
+  }
+
+  const pxPerMm = canvas.width / pdfWidth;
+  const pageSliceHeightPx = Math.max(1, Math.floor(pdfHeight * pxPerMm));
+  let offsetY = 0;
+  let pageIndex = 0;
+
+  while (offsetY < canvas.height - 0.5) {
+    const remaining = canvas.height - offsetY;
+    const sliceHeight = Math.min(pageSliceHeightPx, remaining);
+    if (sliceHeight <= 0) break;
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sliceHeight;
+    const context = pageCanvas.getContext("2d");
+    if (!context) {
+      throw new Error("PDF 캡처를 위한 캔버스 컨텍스트를 생성하지 못했습니다.");
+    }
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+    context.drawImage(canvas, 0, offsetY, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+
+    if (pageIndex > 0) {
+      doc.addPage("a4", "portrait");
+    }
+
+    const renderHeightMm = sliceHeight / pxPerMm;
+    doc.addImage(pageCanvas.toDataURL("image/png"), "PNG", 0, 0, pdfWidth, renderHeightMm);
+
+    offsetY += sliceHeight;
+    pageIndex += 1;
+  }
+
+  return { doc, fileName: getSettlementPdfFileName(report) };
+}
+
+async function downloadSettlementPdf() {
+  if (!currentSettlementReport || currentSettlementReport.jobs.length === 0) {
+    showToast("선택한 조건의 작업이 없어 저장할 수 없습니다.");
+    return;
+  }
+
+  try {
+    const { doc, fileName } = await createSettlementPdfDocument(currentSettlementReport);
+    doc.save(fileName);
+    showToast("PDF 파일을 저장했습니다.");
+  } catch (error) {
+    console.error(error);
+    showToast("PDF 저장에 실패했습니다.");
+  }
 }
 
 function openSettlementStatement() {
@@ -920,15 +1141,58 @@ function openSettlementStatement() {
   document.getElementById("settlementStatementContent").innerHTML = content;
   document.getElementById("settlementStatementModal").classList.remove("hidden");
   document.getElementById("settlementStatementModal").setAttribute("aria-hidden", "false");
+  updateSettlementStatementPreviewScale();
 }
 
 function closeSettlementStatement() {
+  document.body.classList.remove("print-settlement");
   document.getElementById("settlementStatementModal").classList.add("hidden");
   document.getElementById("settlementStatementModal").setAttribute("aria-hidden", "true");
 }
 
 function printSettlementStatement() {
+  document.body.classList.add("print-settlement");
+  const cleanup = () => document.body.classList.remove("print-settlement");
+  window.addEventListener("afterprint", cleanup, { once: true });
   window.print();
+  setTimeout(cleanup, 1000);
+}
+
+async function shareSettlementStatement() {
+  if (!currentSettlementReport || currentSettlementReport.jobs.length === 0) {
+    showToast("공유할 거래내역이 없습니다.");
+    return;
+  }
+
+  if (window.location.protocol === "file:") {
+    showToast("로컬 미리보기에서는 파일 공유를 지원하지 않습니다. GitHub Pages에서 테스트해주세요.");
+    return;
+  }
+
+  try {
+    const { doc, fileName } = await createSettlementPdfDocument(currentSettlementReport);
+    const blob = doc.output("blob");
+    const file = new File([blob], fileName, { type: "application/pdf" });
+
+    const hasShareApi = typeof navigator.share === "function";
+    const hasCanShareApi = typeof navigator.canShare === "function";
+    const canShareFile = hasCanShareApi ? navigator.canShare({ files: [file] }) : false;
+
+    if (hasShareApi && canShareFile) {
+      await navigator.share({
+        title: "거래내역서",
+        text: "거래내역서를 공유합니다.",
+        files: [file]
+      });
+      return;
+    }
+
+    showToast("이 환경에서는 PDF 파일 공유를 지원하지 않습니다. 휴대폰의 GitHub Pages 앱 화면에서 다시 시도하거나 PDF 저장 버튼을 이용해주세요.");
+  } catch (error) {
+    if (error && error.name === "AbortError") return;
+    console.error("공유 실패", error);
+    showToast("공유에 실패했습니다. PDF 저장 버튼을 이용해주세요.");
+  }
 }
 
 function bindExpenseForm() {
@@ -1395,6 +1659,7 @@ function renderAll() {
   renderJobList();
   renderCustomersView();
   renderSettlementView();
+  refreshSettlementStatementIfOpen();
 }
 
 function registerServiceWorker() {
@@ -1420,10 +1685,15 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("importFile").addEventListener("change", importBackup);
   document.getElementById("closeInvoiceBtn").addEventListener("click", closeInvoice);
   document.getElementById("settlementStatementBtn").addEventListener("click", openSettlementStatement);
-  document.getElementById("closeSettlementStatementBtn").addEventListener("click", closeSettlementStatement);
-  document.getElementById("printSettlementStatementBtn").addEventListener("click", printSettlementStatement);
+  document.getElementById("closeReportBtn").addEventListener("click", closeSettlementStatement);
+  document.getElementById("savePdfBtn").addEventListener("click", downloadSettlementPdf);
+  document.getElementById("printReportBtn").addEventListener("click", printSettlementStatement);
+  document.getElementById("shareReportBtn").addEventListener("click", shareSettlementStatement);
   document.getElementById("settlementStatementModal").addEventListener("click", (event) => {
     if (event.target.id === "settlementStatementModal") closeSettlementStatement();
+  });
+  window.addEventListener("resize", () => {
+    updateSettlementStatementPreviewScale();
   });
   document.getElementById("backToMainBtn").addEventListener("click", () => {
     closeInvoice();

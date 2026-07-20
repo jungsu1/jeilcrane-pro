@@ -471,18 +471,20 @@
     </div>
 
     <div id="settlementStatementModal" class="modal hidden" aria-hidden="true">
-      <div class="invoice-sheet settlement-statement-sheet">
-        <div class="invoice-actions">
-          <button id="closeSettlementStatementBtn" class="back-btn">← 닫기</button>
-          <div class="invoice-action-group">
-            <button id="printSettlementStatementBtn" class="ghost-btn">인쇄</button>
-          </div>
+      <div class="invoice-sheet settlement-statement-sheet report-modal">
+        <div class="report-toolbar">
+          <button type="button" class="report-action-btn" id="savePdfBtn">PDF 저장</button>
+          <button type="button" class="report-action-btn" id="printReportBtn">인쇄</button>
+          <button type="button" class="report-action-btn" id="shareReportBtn">공유</button>
+          <button type="button" class="report-action-btn" id="closeReportBtn">닫기</button>
         </div>
-        <div id="settlementStatementContent" class="invoice-content"></div>
+        <div id="settlementStatementContent" class="report-preview-scroll"></div>
       </div>
     </div>
 
     <div id="toast" class="toast" aria-live="polite"></div>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

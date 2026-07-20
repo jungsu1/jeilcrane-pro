@@ -869,32 +869,288 @@ input[type="file"] { display: none; }
   color: #111827;
 }
 
+.settlement-statement-sheet {
+  width: min(100%, 980px);
+  max-height: 100dvh;
+  padding: 0;
+  background: #f8fafc;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.report-modal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.report-toolbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 100;
+  flex: 0 0 auto;
+  background: #f8fafc;
+}
+
+.report-action-btn {
+  width: 100%;
+  min-width: 0;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 12px;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #21b8ef, #7654f6);
+  border: none;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: visible;
+  text-indent: 0 !important;
+  transform: none !important;
+}
+
+.report-preview-scroll {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  box-sizing: border-box;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 16px;
+}
+
+.report-scale-wrapper {
+  width: max-content;
+  min-width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow: visible;
+}
+
+.settlement-a4-document {
+  width: 210mm;
+  min-height: 297mm;
+  height: auto;
+  box-sizing: border-box;
+  padding: 15mm;
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.2);
+  border: 1px solid #d1d5db;
+  font-size: 10.5pt;
+  line-height: 1.45;
+  overflow: visible;
+  margin: 0;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+}
+
+.statement-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10mm;
+  border-bottom: 1px solid #d1d5db;
+  padding-bottom: 6mm;
+  margin-bottom: 6mm;
+}
+
+.statement-header h2 {
+  margin: 0;
+  font-size: 22pt;
+  letter-spacing: 0.02em;
+}
+
+.statement-meta {
+  display: grid;
+  gap: 2mm;
+  text-align: right;
+  font-size: 10pt;
+}
+
+.statement-parties {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4mm;
+  margin-bottom: 6mm;
+}
+
+.statement-party-box {
+  border: 1px solid #d1d5db;
+  border-radius: 3mm;
+  padding: 4mm;
+  background: #ffffff;
+}
+
+.statement-party-box h3 {
+  margin: 0 0 2mm;
+  font-size: 10.5pt;
+  color: #1f2937;
+}
+
+.statement-party-box div {
+  margin: 0;
+  font-size: 10pt;
+}
+
+.settlement-a4-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 10pt;
+}
+
+.settlement-a4-table thead {
+  display: table-header-group;
+}
+
+.settlement-a4-table th,
+.settlement-a4-table td {
+  border: 1px solid #cbd5e1;
+  padding: 3mm 2.4mm;
+  vertical-align: top;
+}
+
+.settlement-a4-table th {
+  background: #eaf4ff;
+  font-size: 10.5pt;
+  font-weight: 700;
+}
+
+.settlement-a4-table tbody tr {
+  min-height: 10mm;
+}
+
+.settlement-a4-table .site-cell,
+.settlement-a4-table .work-cell {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.settlement-a4-table .date-cell,
+.settlement-a4-table .amount-cell,
+.settlement-a4-table .status-cell {
+  white-space: nowrap;
+}
+
+.settlement-a4-table .amount-cell {
+  text-align: right;
+}
+
+.settlement-a4-table .status-cell {
+  text-align: center;
+}
+
+.statement-total-box {
+  margin-top: 6mm;
+  border-top: 1px solid #d1d5db;
+  padding-top: 4mm;
+  display: grid;
+  gap: 2mm;
+}
+
+.statement-total-box div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5pt;
+}
+
+.statement-total-box strong {
+  font-size: 11pt;
+}
+
 @media print {
-  body { background: #fff; }
-  .app-shell, .topbar, .bottom-nav, .toast, .invoice-actions { display: none !important; }
-  .modal {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  body.print-settlement .app-shell,
+  body.print-settlement #invoiceModal,
+  body.print-settlement .toast {
+    display: none !important;
+  }
+
+  body.print-settlement #settlementStatementModal {
     display: block !important;
     position: static;
-    background: #fff;
+    inset: auto;
     padding: 0;
+    background: #fff;
   }
-  .invoice-sheet {
-    width: 100%;
+
+  body.print-settlement .report-toolbar,
+  body.print-settlement .report-preview-scroll {
+    background: #fff !important;
+  }
+
+  body.print-settlement .report-toolbar,
+  body.print-settlement .topbar,
+  body.print-settlement .bottom-nav {
+    display: none !important;
+  }
+
+  body.print-settlement .settlement-statement-sheet {
+    width: 210mm;
     max-height: none;
+    padding: 0;
     overflow: visible;
     box-shadow: none;
-    padding: 0;
     border-radius: 0;
     background: #fff;
+    display: block;
   }
-  .invoice-content {
-    border: none;
-    min-height: auto;
+
+  body.print-settlement .report-preview-scroll {
     padding: 0;
-    page-break-inside: avoid;
-    box-shadow: none;
-    max-width: none;
+    overflow: visible;
+    background: #fff;
+  }
+
+  body.print-settlement .report-document {
+    width: 210mm;
+    min-height: 297mm;
+    height: auto;
     margin: 0;
+    padding: 15mm;
+    border: none;
+    box-shadow: none;
+    transform: none !important;
+    overflow: visible;
+  }
+
+  body.print-settlement .settlement-a4-table thead {
+    display: table-header-group;
+  }
+
+  body.print-settlement .settlement-a4-table tr,
+  body.print-settlement .settlement-a4-table td,
+  body.print-settlement .settlement-a4-table th,
+  body.print-settlement .statement-total-box {
+    page-break-inside: avoid;
   }
 }
 
@@ -913,6 +1169,33 @@ input[type="file"] { display: none; }
 
   .invoice-title {
     font-size: 1.7rem;
+  }
+
+  .settlement-statement-sheet {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 16px;
+  }
+
+  .report-toolbar {
+    padding: 12px;
+  }
+
+  .report-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .statement-header {
+    flex-direction: column;
+    gap: 2.5mm;
+  }
+
+  .statement-meta {
+    text-align: left;
+  }
+
+  .statement-parties {
+    grid-template-columns: 1fr;
   }
 }
 
