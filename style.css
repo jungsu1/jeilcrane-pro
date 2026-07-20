@@ -461,6 +461,52 @@ input[type="file"] { display: none; }
   color: #dbeafe;
 }
 
+.period-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.period-btn {
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.period-btn.active {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  border-color: transparent;
+}
+
+.settlement-filter-row {
+  margin-bottom: 10px;
+}
+
+.custom-period-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.settlement-summary-card {
+  min-height: 98px;
+}
+
+.settlement-card-item {
+  align-items: center;
+  padding: 12px 0;
+}
+
+.settlement-job-card {
+  padding: 12px 0;
+}
+
 .tiny-btn {
   padding: 6px 8px;
   background: rgba(56, 189, 248, 0.16);
@@ -487,9 +533,14 @@ input[type="file"] { display: none; }
   }
 
   .job-card-actions,
-  .expense-list-item {
+  .expense-list-item,
+  .custom-period-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .custom-period-row {
+    grid-template-columns: 1fr;
   }
 
   .job-card-actions .tiny-btn,

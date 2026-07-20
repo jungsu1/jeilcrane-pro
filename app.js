@@ -3,6 +3,9 @@ const EXPENSE_CATEGORIES = ["주유", "장비수리", "소모품", "식비", "�
 let selectedCustomerId = null;
 let selectedCalendarDate = null;
 let calendarViewDate = new Date();
+let selectedSettlementPeriod = "this-month";
+let selectedSettlementCustomer = "all";
+let currentSettlementReport = null;
 
 function getDefaultCompanyInfo() {
   return {
@@ -465,104 +468,235 @@ function renderCustomersView() {
   `;
 }
 
-function renderSettlementView() {
-  const monthInput = document.getElementById("settlementMonth");
-  const selectedMonth = monthInput ? monthInput.value || getCurrentMonth() : getCurrentMonth();
-  if (monthInput) monthInput.value = selectedMonth;
+function getSettlementRange(periodName) {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth();
 
-  const filteredJobs = state.jobs.filter((job) => job.date && job.date.startsWith(selectedMonth));
-  const monthlySales = filteredJobs
-    .filter((job) => job.jobType === "내 장비 작업")
-    .reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
-  const outstandingReceivable = filteredJobs
-    .filter((job) => job.jobType === "내 장비 작업")
-    .reduce((sum, job) => sum + (job.receivableStatus === "미수" ? Number(job.salesAmount || 0) : 0), 0);
-  const outstandingPayable = filteredJobs
-    .filter((job) => job.jobType === "배차 작업")
-    .reduce((sum, job) => sum + (job.payoutStatus === "미지급" ? Number(job.payoutAmount || 0) : 0), 0);
+  const createMonthKey = (year, monthIndex) => {
+    const month = String(monthIndex + 1).padStart(2, "0");
+    return `${year}-${month}`;
+  };
 
-  document.getElementById("settlementSummary").innerHTML = [
-    { title: "이번 달 매출", value: formatCurrency(monthlySales) },
-    { title: "미수금", value: formatCurrency(outstandingReceivable) },
-    { title: "미지급금", value: formatCurrency(outstandingPayable) },
-    { title: "이번 달 작업 건수", value: `${filteredJobs.length}건` }
-  ].map((item) => `
-    <div class="metric-card">
-      <h4>${escapeHtml(item.title)}</h4>
-      <strong>${escapeHtml(item.value)}</strong>
-    </div>
-  `).join("");
+  const getMonthRangeKeys = (year, monthIndex) => {
+    const start = new Date(year, monthIndex, 1);
+    const end = new Date(year, monthIndex + 1, 0);
+    return {
+      startKey: formatDateKey(start),
+      endKey: formatDateKey(end)
+    };
+  };
+
+  const monthKey = createMonthKey(currentYear, currentMonth);
+
+  switch (periodName) {
+    case "last-month": {
+      const targetMonthIndex = currentMonth === 0 ? 11 : currentMonth - 1;
+      const targetYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+      return getMonthRangeKeys(targetYear, targetMonthIndex);
+    }
+    case "this-year": {
+      return {
+        startKey: `${currentYear}-01-01`,
+        endKey: `${currentYear}-12-31`
+      };
+    }
+    case "all": {
+      return null;
+    }
+    case "custom": {
+      const startInput = document.getElementById("settlementStartMonth");
+      const endInput = document.getElementById("settlementEndMonth");
+      const startValue = startInput?.value;
+      const endValue = endInput?.value;
+      if (!startValue && !endValue) {
+        return getMonthRangeKeys(currentYear, currentMonth);
+      }
+
+      const startRange = startValue ? getMonthRangeKeys(Number(startValue.split("-")[0]), Number(startValue.split("-")[1]) - 1) : null;
+      const endRange = endValue ? getMonthRangeKeys(Number(endValue.split("-")[0]), Number(endValue.split("-")[1]) - 1) : null;
+      return {
+        startKey: startRange?.startKey || null,
+        endKey: endRange?.endKey || null
+      };
+    }
+    case "this-month":
+    default: {
+      return getMonthRangeKeys(currentYear, currentMonth);
+    }
+  }
+}
+
+function isDateInRange(dateValue, range) {
+  if (!range) return true;
+  if (!dateValue) return false;
+  if (range.startKey && dateValue < range.startKey) return false;
+  if (range.endKey && dateValue > range.endKey) return false;
+  return true;
+}
+
+function updateSettlementPeriodUI() {
+  document.querySelectorAll("[data-period]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.period === selectedSettlementPeriod);
+  });
+
+  const customRow = document.getElementById("customPeriodRow");
+  if (customRow) {
+    customRow.classList.toggle("hidden", selectedSettlementPeriod !== "custom");
+  }
+}
+
+function buildSettlementCustomerOptions() {
+  const select = document.getElementById("settlementCustomerSelect");
+  if (!select) return;
+
+  const previousValue = select.value || selectedSettlementCustomer;
+  const options = state.customers
+    .map((customer) => `<option value="${escapeHtml(customer.id)}" ${previousValue === customer.id ? "selected" : ""}>${escapeHtml(customer.name)}</option>`)
+    .join("");
+
+  select.innerHTML = `<option value="all">전체</option>${options}`;
+  if (previousValue && state.customers.some((customer) => customer.id === previousValue)) {
+    select.value = previousValue;
+  } else {
+    select.value = "all";
+  }
+
+  selectedSettlementCustomer = select.value || "all";
+}
+
+function buildSettlementReportData() {
+  const range = getSettlementRange(selectedSettlementPeriod);
+  const selectedCustomer = state.customers.find((customer) => customer.id === selectedSettlementCustomer);
+  const customerName = selectedCustomer?.name || "";
+
+  const filteredJobs = state.jobs.filter((job) => {
+    if (!isDateInRange(job.date, range)) return false;
+    if (selectedSettlementCustomer === "all") return true;
+    if (job.jobType === "내 장비 작업") {
+      return (job.customerId && job.customerId === selectedSettlementCustomer) || (job.customerName && job.customerName === customerName);
+    }
+    return false;
+  });
+
+  const filteredExpenses = state.expenses.filter((expense) => isDateInRange(expense.date, range));
+  const equipmentJobs = filteredJobs.filter((job) => job.jobType === "내 장비 작업");
+  const completedReceivables = equipmentJobs.filter((job) => job.receivableStatus === "수금완료");
+  const outstandingReceivables = equipmentJobs.filter((job) => job.receivableStatus === "미수");
+
+  const summary = {
+    jobCount: filteredJobs.length,
+    totalSales: equipmentJobs.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
+    completedReceivable: completedReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
+    outstandingReceivable: outstandingReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
+    totalExpenses: filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
+    netProfit: 0
+  };
+  summary.netProfit = summary.totalSales - summary.totalExpenses;
 
   const customerMap = new Map();
   filteredJobs.forEach((job) => {
-    if (job.jobType !== "내 장비 작업" || !job.customerName) return;
-    const key = job.customerId || job.customerName;
+    const name = job.customerName || job.providerName || "미입력";
+    if (!name) return;
+    const key = `${job.jobType}:${name}`;
     if (!customerMap.has(key)) {
       customerMap.set(key, {
-        customerName: job.customerName,
-        totalSales: 0,
-        outstanding: 0
+        name,
+        totalAmount: 0,
+        count: 0
       });
     }
     const entry = customerMap.get(key);
-    entry.totalSales += Number(job.salesAmount || 0);
-    entry.outstanding += job.receivableStatus === "미수" ? Number(job.salesAmount || 0) : 0;
+    entry.totalAmount += job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+    entry.count += 1;
   });
 
-  const customerItems = Array.from(customerMap.values())
-    .sort((a, b) => b.totalSales - a.totalSales)
-    .map((customer) => `
-      <article class="list-item">
-        <div>
-          <strong>${escapeHtml(customer.customerName)}</strong>
-          <p>거래처별 집계</p>
-        </div>
-        <div class="value-block">
-          <span class="pill">총 매출</span>
-          <p>${escapeHtml(formatCurrency(customer.totalSales))}</p>
-          <p>${escapeHtml(`미수금 ${formatCurrency(customer.outstanding)}`)}</p>
-        </div>
-      </article>
-    `)
-    .join("");
+  return {
+    filters: {
+      period: selectedSettlementPeriod,
+      customerId: selectedSettlementCustomer,
+      customerName,
+      range
+    },
+    summary,
+    customerSummaries: Array.from(customerMap.values()).sort((a, b) => b.totalAmount - a.totalAmount),
+    jobs: filteredJobs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+  };
+}
 
-  document.getElementById("settlementCustomers").innerHTML = customerItems || '<p class="muted">이 월의 거래처 정산 내역이 없습니다.</p>';
+function renderSettlementView() {
+  updateSettlementPeriodUI();
+  buildSettlementCustomerOptions();
 
-  const monthlyExpenses = state.expenses.filter((expense) => expense.date && expense.date.startsWith(selectedMonth));
-  const totalExpenses = monthlyExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const categoryTotals = EXPENSE_CATEGORIES.map((category) => ({
-    category,
-    total: monthlyExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
-  }));
+  currentSettlementReport = buildSettlementReportData();
+  window.jeilcraneSettlementReport = currentSettlementReport;
 
-  document.getElementById("expenseSummary").innerHTML = [
-    { title: "이번 달 총지출", value: formatCurrency(totalExpenses) },
-    ...categoryTotals.map((item) => ({ title: item.category, value: formatCurrency(item.total) }))
+  const { summary, customerSummaries, jobs } = currentSettlementReport;
+
+  document.getElementById("settlementSummary").innerHTML = [
+    { title: "작업건수", value: `${summary.jobCount}건` },
+    { title: "총매출", value: formatCurrency(summary.totalSales) },
+    { title: "수금완료", value: formatCurrency(summary.completedReceivable) },
+    { title: "미수금", value: formatCurrency(summary.outstandingReceivable) },
+    { title: "총지출", value: formatCurrency(summary.totalExpenses) },
+    { title: "순이익", value: formatCurrency(summary.netProfit) }
   ].map((item) => `
-    <div class="metric-card">
+    <div class="metric-card settlement-summary-card">
       <h4>${escapeHtml(item.title)}</h4>
       <strong>${escapeHtml(item.value)}</strong>
     </div>
   `).join("");
 
-  const expenseItems = monthlyExpenses
-    .slice()
-    .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-    .map((expense) => `
-      <article class="list-item expense-list-item">
-        <div class="expense-item-main">
-          <div class="expense-item-top">
-            <strong>${escapeHtml(expense.category || "지출")}</strong>
-            <span class="expense-amount">${escapeHtml(formatCurrency(expense.amount || 0))}</span>
-          </div>
-          <p>${escapeHtml(expense.date || "")}${expense.memo ? ` · ${escapeHtml(expense.memo)}` : ""}</p>
+  const customerItems = customerSummaries
+    .map((customer) => `
+      <article class="list-item settlement-card-item">
+        <div>
+          <strong>${escapeHtml(customer.name)}</strong>
+          <p>${customer.count}건 · 기간 합계</p>
         </div>
-        <button class="tiny-btn danger" data-action="delete-expense" data-id="${escapeHtml(expense.id)}">삭제</button>
+        <div class="value-block">
+          <span class="pill">합계</span>
+          <p>${escapeHtml(formatAmountForList(customer.totalAmount))}</p>
+        </div>
       </article>
     `)
     .join("");
 
-  document.getElementById("expenseList").innerHTML = expenseItems || '<p class="muted">이 월의 지출 내역이 없습니다.</p>';
+  document.getElementById("settlementCustomers").innerHTML = customerItems || '<p class="muted">선택한 조건의 거래처 합계가 없습니다.</p>';
+
+  const jobItems = jobs
+    .map((job) => {
+      const amountValue = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+      const amountText = formatAmountForList(amountValue);
+      const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
+      const statusClass = statusText === "수금완료" || statusText === "지급완료" ? "completed" : "pending";
+
+      return `
+        <article class="list-item job-list-item settlement-job-card">
+          <div class="job-card-main">
+            <div class="job-card-header">
+              <strong class="job-title">${escapeHtml(job.siteName || "현장 미입력")}</strong>
+            </div>
+            <div class="job-card-meta">
+              <span>📅 ${escapeHtml(job.date || "")}</span>
+              <span>🚛 ${escapeHtml(job.jobType)}</span>
+              ${job.workTime ? `<span>🕒 ${escapeHtml(job.workTime)}</span>` : ""}
+              <span>🏢 ${escapeHtml(job.customerName || job.providerName || "정보 없음")}</span>
+            </div>
+            <div class="job-card-finance">
+              <div class="job-amount-row">
+                <span class="job-card-label">💰</span>
+                <span class="job-amount">${escapeHtml(amountText)}</span>
+              </div>
+              <span class="pill ${statusClass}">${escapeHtml(statusText)}</span>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  document.getElementById("settlementJobList").innerHTML = jobItems || '<p class="muted">선택한 조건의 작업이 없습니다.</p>';
 }
 
 function bindExpenseForm() {
@@ -1051,10 +1185,39 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("invoiceModal").addEventListener("click", (event) => {
     if (event.target.id === "invoiceModal") closeInvoice();
   });
-  const settlementMonthInput = document.getElementById("settlementMonth");
-  if (settlementMonthInput) {
-    settlementMonthInput.value = getCurrentMonth();
-    settlementMonthInput.addEventListener("change", renderSettlementView);
+  document.querySelectorAll("[data-period]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedSettlementPeriod = button.dataset.period;
+      renderSettlementView();
+    });
+  });
+
+  const customerSelect = document.getElementById("settlementCustomerSelect");
+  if (customerSelect) {
+    customerSelect.addEventListener("change", () => {
+      selectedSettlementCustomer = customerSelect.value || "all";
+      renderSettlementView();
+    });
+  }
+
+  const startMonthInput = document.getElementById("settlementStartMonth");
+  const endMonthInput = document.getElementById("settlementEndMonth");
+  [startMonthInput, endMonthInput].forEach((input) => {
+    if (input) {
+      input.addEventListener("change", () => {
+        if (selectedSettlementPeriod !== "custom") {
+          selectedSettlementPeriod = "custom";
+        }
+        renderSettlementView();
+      });
+    }
+  });
+
+  if (startMonthInput && !startMonthInput.value) {
+    startMonthInput.value = getCurrentMonth();
+  }
+  if (endMonthInput && !endMonthInput.value) {
+    endMonthInput.value = getCurrentMonth();
   }
   setTodayDefaults();
   toggleJobTypeFields();
