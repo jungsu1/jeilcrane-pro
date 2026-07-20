@@ -1420,7 +1420,12 @@ function getVisibleJobs() {
   if (selectedCalendarDate) {
     return state.jobs.filter((job) => job.date === selectedCalendarDate);
   }
-  return state.jobs;
+
+  const currentYear = calendarViewDate.getFullYear();
+  const currentMonth = String(calendarViewDate.getMonth() + 1).padStart(2, "0");
+  const monthKey = `${currentYear}-${currentMonth}`;
+
+  return state.jobs.filter((job) => job.date && job.date.startsWith(monthKey));
 }
 
 function renderCalendarView() {
@@ -1585,14 +1590,18 @@ function handleListActions(event) {
   }
 
   if (action === "calendar-prev") {
+    selectedCalendarDate = null;
     calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1);
     renderCalendarView();
+    renderJobList();
     return;
   }
 
   if (action === "calendar-next") {
+    selectedCalendarDate = null;
     calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1);
     renderCalendarView();
+    renderJobList();
     return;
   }
 
