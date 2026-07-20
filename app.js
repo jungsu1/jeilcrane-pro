@@ -219,6 +219,105 @@ function setView(viewName) {
   });
 }
 
+async function downloadInvoice() {
+  const invoiceDocument = document.querySelector("#invoiceContent .invoice-content");
+  if (!invoiceDocument) {
+    showToast("거래명세서를 찾지 못했습니다.");
+    return;
+  }
+
+  try {
+    const jsPDF = ensureJsPdfReady();
+    const html2canvas = ensureHtml2CanvasReady();
+    const captureHost = document.createElement("div");
+    captureHost.style.position = "fixed";
+    captureHost.style.left = "-10000px";
+    captureHost.style.top = "0";
+    captureHost.style.background = "#ffffff";
+    captureHost.style.padding = "0";
+    captureHost.style.margin = "0";
+    captureHost.style.zIndex = "-1";
+
+    const captureNode = invoiceDocument.cloneNode(true);
+    captureNode.style.transform = "none";
+    captureNode.style.transformOrigin = "top left";
+    captureNode.style.width = "210mm";
+    captureNode.style.minHeight = "297mm";
+    captureNode.style.height = "auto";
+    captureNode.style.margin = "0";
+    captureNode.style.border = "none";
+    captureNode.style.boxShadow = "none";
+    captureNode.style.overflow = "visible";
+
+    captureHost.appendChild(captureNode);
+    document.body.appendChild(captureHost);
+
+    let canvas;
+    try {
+      canvas = await html2canvas(captureNode, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true
+      });
+    } finally {
+      captureHost.remove();
+    }
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pdfWidth = 210;
+    const pdfHeight = 297;
+    const imageHeight = (canvas.height * pdfWidth) / canvas.width;
+    const fileName = `거래명세서_${getToday()}.pdf`;
+
+    if (imageHeight <= pdfHeight + 1.5) {
+      const imgData = canvas.toDataURL("image/png");
+      doc.addImage(imgData, "PNG", 0, 0, pdfWidth, Math.min(imageHeight, pdfHeight));
+      doc.save(fileName);
+      showToast("PDF 파일을 저장했습니다.");
+      return;
+    }
+
+    const pxPerMm = canvas.width / pdfWidth;
+    const pageSliceHeightPx = Math.max(1, Math.floor(pdfHeight * pxPerMm));
+    let offsetY = 0;
+    let pageIndex = 0;
+
+    while (offsetY < canvas.height - 0.5) {
+      const remaining = canvas.height - offsetY;
+      const sliceHeight = Math.min(pageSliceHeightPx, remaining);
+      if (sliceHeight <= 0) break;
+
+      const pageCanvas = document.createElement("canvas");
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = sliceHeight;
+      const context = pageCanvas.getContext("2d");
+      if (!context) {
+        throw new Error("PDF 캡처를 위한 캔버스 컨텍스트를 생성하지 못했습니다.");
+      }
+
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      context.drawImage(canvas, 0, offsetY, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+
+      if (pageIndex > 0) {
+        doc.addPage("a4", "portrait");
+      }
+
+      const renderHeightMm = sliceHeight / pxPerMm;
+      doc.addImage(pageCanvas.toDataURL("image/png"), "PNG", 0, 0, pdfWidth, renderHeightMm);
+
+      offsetY += sliceHeight;
+      pageIndex += 1;
+    }
+
+    doc.save(fileName);
+    showToast("PDF 파일을 저장했습니다.");
+  } catch (error) {
+    console.error(error);
+    showToast("PDF 저장에 실패했습니다.");
+  }
+}
+
 function bindNavigation() {
   document.querySelectorAll(".nav-btn").forEach((button) => {
     button.addEventListener("click", () => setView(button.dataset.view));
@@ -226,16 +325,9 @@ function bindNavigation() {
 }
 
 function bindSettingsCards() {
-  const sectionMap = {
-    "open-customer-management": "customer",
-    "open-company-settings": "company",
-    "open-backup-view": "backup",
-    "open-app-info": "app"
-  };
-
-  document.querySelectorAll(".settings-menu-card").forEach((button) => {
-    button.addEventListener("click", () => {
-      const section = sectionMap[button.dataset.action];
+  document.querySelectorAll(".settings-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const section = card.dataset.section;
       if (!section) return;
       setView("settings");
       showSettingsSection(section);
@@ -1403,17 +1495,11 @@ function printInvoice() {
   window.print();
 }
 
-function downloadInvoice() {
-  const printWindow = window.open("", "_blank", "width=900,height=1000");
-  if (!printWindow) {
-    showToast("팝업이 차단되었습니다. 브라우저 설정을 확인해주세요.");
-    return;
-  }
-  const content = document.getElementById("invoiceContent").innerHTML;
-  printWindow.document.write(`<!DOCTYPE html><html><head><title>거래명세서</title><style>@page{size:A4;margin:12mm}body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,sans-serif} .invoice-content{padding:24px;font-size:13px;line-height:1.45} .invoice-company{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px;border-bottom:1px solid #e5e7eb;padding-bottom:12px} .invoice-company-info{text-align:right;font-size:12px;color:#374151} .invoice-title{font-size:22px;margin:0 0 6px} .invoice-number{margin:0;font-weight:700} .invoice-meta{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:16px 0;font-size:12px} .invoice-table{width:100%;border-collapse:collapse;margin-top:16px} .invoice-table th,.invoice-table td{border:1px solid #d1d5db;padding:8px;text-align:left} .invoice-table th{background:#f3f4f6} .invoice-total{text-align:right;font-weight:700;margin-top:16px}</style></head><body>${content}</body></html>`);
-  printWindow.document.close();
-  printWindow.focus();
-  printWindow.print();
+function getCalendarMonthContext() {
+  return {
+    currentCalendarYear: calendarViewDate.getFullYear(),
+    currentCalendarMonth: calendarViewDate.getMonth()
+  };
 }
 
 function getVisibleJobs() {
@@ -1421,11 +1507,15 @@ function getVisibleJobs() {
     return state.jobs.filter((job) => job.date === selectedCalendarDate);
   }
 
-  const currentYear = calendarViewDate.getFullYear();
-  const currentMonth = String(calendarViewDate.getMonth() + 1).padStart(2, "0");
-  const monthKey = `${currentYear}-${currentMonth}`;
+  const { currentCalendarYear, currentCalendarMonth } = getCalendarMonthContext();
 
-  return state.jobs.filter((job) => job.date && job.date.startsWith(monthKey));
+  const monthlyJobs = state.jobs.filter((job) => {
+    if (!job.date) return false;
+    const [jobYear, jobMonth] = job.date.split("-").map(Number);
+    return jobYear === currentCalendarYear && jobMonth === currentCalendarMonth + 1;
+  });
+
+  return monthlyJobs;
 }
 
 function renderCalendarView() {
@@ -1509,7 +1599,12 @@ function renderCalendarView() {
       </div>
     `;
   } else {
-    summary.innerHTML = '<div class="calendar-summary-card"><div><p class="muted">전체 작업 보기</p><strong>모든 작업</strong></div></div>';
+    summary.innerHTML = `<div class="calendar-summary-card"><div><p class="muted">${escapeHtml(monthLabel)} 전체 작업</p><strong>현재 월 작업</strong></div></div>`;
+  }
+
+  const showAllJobsButton = document.querySelector('[data-action="show-all-jobs"]');
+  if (showAllJobsButton) {
+    showAllJobsButton.textContent = `${monthLabel} 전체 작업`;
   }
 }
 
