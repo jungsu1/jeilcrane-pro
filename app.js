@@ -1,6 +1,8 @@
 ﻿const STORAGE_KEY = "jeilcrane-pro-db-v2";
 const EXPENSE_CATEGORIES = ["주유", "장비수리", "소모품", "식비", "보험", "기타"];
 let selectedCustomerId = null;
+let selectedCalendarDate = null;
+let calendarViewDate = new Date();
 
 function getDefaultCompanyInfo() {
   return {
@@ -149,16 +151,24 @@ function showToast(message) {
   showToast.timer = setTimeout(() => toast.classList.remove("show"), 1800);
 }
 
+function formatDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function getToday() {
-  return new Date().toISOString().slice(0, 10);
+  return formatDateKey(new Date());
 }
 
 function getCurrentMonth() {
-  return new Date().toISOString().slice(0, 7);
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function getInvoiceDateKey() {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  return getToday().replace(/-/g, "");
 }
 
 function setTodayDefaults() {
@@ -776,8 +786,101 @@ function downloadInvoice() {
   printWindow.print();
 }
 
+function getVisibleJobs() {
+  if (selectedCalendarDate) {
+    return state.jobs.filter((job) => job.date === selectedCalendarDate);
+  }
+  return state.jobs;
+}
+
+function renderCalendarView() {
+  const container = document.getElementById("calendarContainer");
+  const summary = document.getElementById("calendarSelectionSummary");
+  if (!container || !summary) return;
+
+  const monthLabel = `${calendarViewDate.getFullYear()}년 ${calendarViewDate.getMonth() + 1}월`;
+  const firstDay = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth(), 1);
+  const lastDay = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 0);
+  const leadingDays = firstDay.getDay();
+  const daysInMonth = lastDay.getDate();
+  const totalCells = Math.ceil((leadingDays + daysInMonth) / 7) * 7;
+  const jobsByDate = state.jobs.reduce((map, job) => {
+    if (job.date) {
+      if (!map[job.date]) map[job.date] = [];
+      map[job.date].push(job);
+    }
+    return map;
+  }, {});
+  const todayKey = getToday();
+
+  const days = Array.from({ length: totalCells }, (_, index) => {
+    const dayOffset = index - leadingDays + 1;
+    return new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth(), dayOffset);
+  });
+
+  container.innerHTML = `
+    <div class="calendar-toolbar">
+      <button type="button" class="ghost-btn compact" data-action="calendar-prev">◀</button>
+      <strong>${escapeHtml(monthLabel)}</strong>
+      <button type="button" class="ghost-btn compact" data-action="calendar-next">▶</button>
+    </div>
+    <div class="calendar-weekdays">
+      <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+    </div>
+    <div class="calendar-grid">
+      ${days.map((date) => {
+        const dateKey = formatDateKey(date);
+        const isCurrentMonth = date.getMonth() === calendarViewDate.getMonth();
+        const isSelected = selectedCalendarDate === dateKey;
+        const isToday = dateKey === todayKey;
+        const jobs = jobsByDate[dateKey] || [];
+        const hasJobs = jobs.length > 0;
+        const hasEquipmentJobs = jobs.some((job) => job.jobType === "내 장비 작업");
+        const hasDispatchJobs = jobs.some((job) => job.jobType === "배차 작업");
+        return `
+          <button
+            type="button"
+            class="calendar-date-btn ${isCurrentMonth ? "" : "calendar-date-btn-muted"} ${isSelected ? "selected" : ""} ${hasJobs ? "has-jobs" : ""} ${isToday ? "today" : ""}"
+            data-action="select-date"
+            data-date="${escapeHtml(dateKey)}"
+          >
+            <span class="calendar-date-number">${date.getDate()}</span>
+            ${hasJobs ? `
+              <span class="calendar-marker-group">
+                ${hasEquipmentJobs ? '<span class="calendar-dot calendar-dot-green"></span>' : ""}
+                ${hasDispatchJobs ? '<span class="calendar-dot calendar-dot-red"></span>' : ""}
+              </span>
+            ` : ""}
+            ${hasJobs ? `<span class="calendar-count">${jobs.length}</span>` : ""}
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+
+  if (selectedCalendarDate) {
+    const selectedJobs = jobsByDate[selectedCalendarDate] || [];
+    const dailySales = selectedJobs
+      .filter((job) => job.jobType === "내 장비 작업")
+      .reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
+
+    summary.innerHTML = `
+      <div class="calendar-summary-card">
+        <div>
+          <p class="muted">${escapeHtml(selectedCalendarDate)} 선택됨</p>
+          <strong>${selectedJobs.length}건</strong>
+        </div>
+        <div class="calendar-summary-amount">${escapeHtml(formatCurrency(dailySales))}</div>
+      </div>
+    `;
+  } else {
+    summary.innerHTML = '<div class="calendar-summary-card"><div><p class="muted">전체 작업 보기</p><strong>모든 작업</strong></div></div>';
+  }
+}
+
 function renderJobList() {
-  const items = state.jobs.slice(0, 20).map((job) => {
+  const visibleJobs = getVisibleJobs();
+  const items = visibleJobs.map((job) => {
     const amountValue = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
     const amountText = formatAmountForList(amountValue);
     const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
@@ -821,7 +924,7 @@ function renderJobList() {
 function handleListActions(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
-  const { action, id } = button.dataset;
+  const { action, id, date } = button.dataset;
 
   if (action === "show-customer") {
     selectedCustomerId = id;
@@ -831,6 +934,32 @@ function handleListActions(event) {
 
   if (action === "invoice") {
     openInvoice(id);
+    return;
+  }
+
+  if (action === "select-date") {
+    selectedCalendarDate = date || null;
+    renderCalendarView();
+    renderJobList();
+    return;
+  }
+
+  if (action === "calendar-prev") {
+    calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1);
+    renderCalendarView();
+    return;
+  }
+
+  if (action === "calendar-next") {
+    calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1);
+    renderCalendarView();
+    return;
+  }
+
+  if (action === "show-all-jobs") {
+    selectedCalendarDate = null;
+    renderCalendarView();
+    renderJobList();
     return;
   }
 
@@ -886,6 +1015,7 @@ function renderAll() {
   buildDatalists();
   buildCustomerSelectOptions();
   renderDashboard();
+  renderCalendarView();
   renderJobList();
   renderCustomersView();
   renderSettlementView();

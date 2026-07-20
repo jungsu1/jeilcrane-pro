@@ -158,9 +158,14 @@
 
           <div class="card">
             <div class="section-header">
-              <h3>작업 목록</h3>
-              <span class="muted">최근 등록순</span>
+              <div>
+                <h3>작업 목록</h3>
+                <span class="muted">달력에서 날짜를 선택해 해당 작업만 확인</span>
+              </div>
+              <button type="button" class="ghost-btn compact" data-action="show-all-jobs">전체 작업 보기</button>
             </div>
+            <div id="calendarContainer" class="calendar-shell"></div>
+            <div id="calendarSelectionSummary" class="calendar-summary"></div>
             <div id="jobList" class="stack-list"></div>
           </div>
         </section>
@@ -228,8 +233,18 @@
 
           <div class="card">
             <div class="section-header">
-              <h3>지출 관리</h3>
-              <span class="muted">주유 · 장비수리비 · 소모품 · 잡비</span>
+              <h3>월별 손익</h3>
+              <span class="muted">최근 월별 요약</span>
+            </div>
+            <div id="monthlyProfitList" class="stack-list"></div>
+          </div>
+        </section>
+
+        <section id="expensesView" class="view">
+          <div class="card">
+            <div class="section-header">
+              <h3>지출</h3>
+              <span class="muted">지출 입력 및 관리</span>
             </div>
             <form id="expenseForm" class="form-grid expense-form">
               <div class="form-group">
@@ -295,6 +310,7 @@
               </div>
               <button class="primary-btn full" type="submit">회사 정보 저장</button>
             </form>
+            <button id="goBackupBtn" class="ghost-btn full" type="button">백업/복구로 이동</button>
           </div>
         </section>
 
@@ -316,9 +332,9 @@
         <button class="nav-btn active" data-view="dashboard">홈</button>
         <button class="nav-btn" data-view="jobs">작업</button>
         <button class="nav-btn" data-view="customers">거래처</button>
+        <button class="nav-btn" data-view="expenses">지출</button>
         <button class="nav-btn" data-view="settlement">정산</button>
         <button class="nav-btn" data-view="settings">설정</button>
-        <button class="nav-btn" data-view="backup">백업</button>
       </nav>
     </div>
 

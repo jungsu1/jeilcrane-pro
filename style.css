@@ -346,6 +346,121 @@ input[type="file"] { display: none; }
   color: #fde68a;
 }
 
+.calendar-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.calendar-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-weekdays,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.calendar-weekdays {
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-align: center;
+}
+
+.calendar-date-btn {
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 8px 4px;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.calendar-date-btn-muted {
+  opacity: 0.45;
+}
+
+.calendar-date-btn.selected {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.26), rgba(139, 92, 246, 0.26));
+  border-color: rgba(56, 189, 248, 0.56);
+}
+
+.calendar-date-btn.today {
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.36);
+}
+
+.calendar-date-btn.has-jobs {
+  border-color: rgba(34, 197, 94, 0.36);
+}
+
+.calendar-date-number {
+  font-weight: 700;
+}
+
+.calendar-marker-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.calendar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.calendar-dot-green {
+  background: var(--success);
+}
+
+.calendar-dot-red {
+  background: var(--danger);
+}
+
+.calendar-count {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.calendar-summary {
+  margin-bottom: 10px;
+}
+
+.calendar-summary-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+}
+
+.calendar-summary-card strong {
+  font-size: 1rem;
+}
+
+.calendar-summary-amount {
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: #dbeafe;
+}
+
 .tiny-btn {
   padding: 6px 8px;
   background: rgba(56, 189, 248, 0.16);
