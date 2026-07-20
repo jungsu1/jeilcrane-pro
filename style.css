@@ -703,6 +703,41 @@ input[type="file"] { display: none; }
   z-index: 40;
 }
 
+.confirm-dialog {
+  width: min(100%, 420px);
+  background: #0b1220;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.3);
+}
+
+.confirm-dialog h3 {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+
+.confirm-dialog p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.confirm-warning {
+  margin-top: 6px !important;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.danger-btn {
+  background: linear-gradient(135deg, #fb7185, #e11d48);
+}
+
 .invoice-sheet {
   width: min(100%, 900px);
   max-height: 95vh;

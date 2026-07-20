@@ -7,6 +7,7 @@ let selectedSettlementPeriod = "this-month";
 let selectedSettlementCustomer = "all";
 let currentSettlementReport = null;
 let editingJobId = null;
+let pendingDeleteJobId = null;
 
 function getDefaultCompanyInfo() {
   return {
@@ -403,7 +404,6 @@ function startJobEdit(job) {
   document.getElementById("salesAmount").value = Number(job.salesAmount || 0) || "";
   document.getElementById("receivableStatus").value = job.receivableStatus || "미수";
   document.getElementById("invoiceIssued").value = job.invoiceIssued || "미발행";
-  document.getElementById("providerName").value = job.providerName || "";
   document.getElementById("payoutAmount").value = Number(job.payoutAmount || 0) || "";
   document.getElementById("payoutStatus").value = job.payoutStatus || "미지급";
 
@@ -464,7 +464,7 @@ function bindForm() {
     };
 
     if (jobType === "배차 작업") {
-      record.providerName = document.getElementById("providerName").value.trim();
+      record.providerName = existingJob ? (existingJob.providerName || "") : "";
       record.payoutAmount = Number(document.getElementById("payoutAmount").value || 0);
       record.payoutStatus = document.getElementById("payoutStatus").value;
       delete record.salesAmount;
@@ -1491,6 +1491,41 @@ function closeInvoice() {
   document.getElementById("invoiceModal").setAttribute("aria-hidden", "true");
 }
 
+function openDeleteJobModal(jobId) {
+  const job = state.jobs.find((item) => item.id === jobId);
+  if (!job) {
+    showToast("삭제할 작업을 찾지 못했습니다.");
+    return;
+  }
+  pendingDeleteJobId = jobId;
+  const modal = document.getElementById("deleteJobModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeDeleteJobModal() {
+  pendingDeleteJobId = null;
+  const modal = document.getElementById("deleteJobModal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+function confirmDeleteJob() {
+  if (!pendingDeleteJobId) {
+    closeDeleteJobModal();
+    return;
+  }
+
+  const jobIdToDelete = pendingDeleteJobId;
+  closeDeleteJobModal();
+  state.jobs = state.jobs.filter((job) => job.id !== jobIdToDelete);
+  saveState();
+  renderAll();
+  showToast("작업이 삭제되었습니다.");
+}
+
 function printInvoice() {
   window.print();
 }
@@ -1708,10 +1743,8 @@ function handleListActions(event) {
   }
 
   if (action === "delete") {
-    state.jobs = state.jobs.filter((job) => job.id !== id);
-    saveState();
-    renderAll();
-    showToast("작업이 삭제되었습니다.");
+    openDeleteJobModal(id);
+    return;
   }
 
   if (action === "delete-expense") {
@@ -1804,6 +1837,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   document.getElementById("printInvoiceBtn").addEventListener("click", printInvoice);
   document.getElementById("downloadInvoiceBtn").addEventListener("click", downloadInvoice);
+  document.getElementById("cancelDeleteJobBtn").addEventListener("click", closeDeleteJobModal);
+  document.getElementById("confirmDeleteJobBtn").addEventListener("click", confirmDeleteJob);
+  document.getElementById("deleteJobModal").addEventListener("click", (event) => {
+    if (event.target.id === "deleteJobModal") closeDeleteJobModal();
+  });
   document.getElementById("invoiceModal").addEventListener("click", (event) => {
     if (event.target.id === "invoiceModal") closeInvoice();
   });
