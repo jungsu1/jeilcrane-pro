@@ -685,35 +685,17 @@ function updateSettlementPeriodUI() {
     button.classList.toggle("active", button.dataset.period === selectedSettlementPeriod);
   });
 
-  const customRow = document.getElementById("customPeriodRow");
-  if (customRow) {
-    customRow.classList.toggle("hidden", selectedSettlementPeriod !== "custom");
+  const customPeriodRow = document.getElementById("customPeriodRow");
+  if (customPeriodRow) {
+    customPeriodRow.classList.toggle("hidden", selectedSettlementPeriod !== "custom");
   }
-}
-
-function buildSettlementCustomerOptions() {
-  const select = document.getElementById("settlementCustomerSelect");
-  if (!select) return;
-
-  const previousValue = select.value || selectedSettlementCustomer;
-  const options = state.customers
-    .map((customer) => `<option value="${escapeHtml(customer.id)}" ${previousValue === customer.id ? "selected" : ""}>${escapeHtml(customer.name)}</option>`)
-    .join("");
-
-  select.innerHTML = `<option value="all">전체</option>${options}`;
-  if (previousValue && state.customers.some((customer) => customer.id === previousValue)) {
-    select.value = previousValue;
-  } else {
-    select.value = "all";
-  }
-
-  selectedSettlementCustomer = select.value || "all";
 }
 
 function buildSettlementReportData() {
   const range = getSettlementRange(selectedSettlementPeriod);
-  const selectedCustomer = state.customers.find((customer) => customer.id === selectedSettlementCustomer);
-  const customerName = selectedCustomer?.name || "";
+  const customerName = selectedSettlementCustomer === "all"
+    ? ""
+    : (state.customers.find((customer) => customer.id === selectedSettlementCustomer)?.name || "");
 
   const filteredJobs = state.jobs.filter((job) => {
     if (!isDateInRange(job.date, range)) return false;
@@ -767,6 +749,25 @@ function buildSettlementReportData() {
     customerSummaries: Array.from(customerMap.values()).sort((a, b) => b.totalAmount - a.totalAmount),
     jobs: filteredJobs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""))
   };
+}
+
+function buildSettlementCustomerOptions() {
+  const select = document.getElementById("settlementCustomerSelect");
+  if (!select) return;
+
+  const previousValue = selectedSettlementCustomer || "all";
+  const customerOptions = state.customers
+    .map((customer) => `<option value="${escapeHtml(customer.id)}" ${previousValue === customer.id ? "selected" : ""}>${escapeHtml(customer.name)}</option>`)
+    .join("");
+
+  select.innerHTML = `<option value="all" ${previousValue === "all" ? "selected" : ""}>전체 거래처</option>${customerOptions}`;
+
+  if (previousValue !== "all" && !state.customers.some((customer) => customer.id === previousValue)) {
+    selectedSettlementCustomer = "all";
+    select.value = "all";
+  } else {
+    select.value = previousValue;
+  }
 }
 
 function renderSettlementView() {
@@ -1192,43 +1193,6 @@ function printSettlementStatement() {
   window.addEventListener("afterprint", cleanup, { once: true });
   window.print();
   setTimeout(cleanup, 1000);
-}
-
-async function shareSettlementStatement() {
-  if (!currentSettlementReport || currentSettlementReport.jobs.length === 0) {
-    showToast("공유할 거래내역이 없습니다.");
-    return;
-  }
-
-  if (window.location.protocol === "file:") {
-    showToast("로컬 미리보기에서는 파일 공유를 지원하지 않습니다. GitHub Pages에서 테스트해주세요.");
-    return;
-  }
-
-  try {
-    const { doc, fileName } = await createSettlementPdfDocument(currentSettlementReport);
-    const blob = doc.output("blob");
-    const file = new File([blob], fileName, { type: "application/pdf" });
-
-    const hasShareApi = typeof navigator.share === "function";
-    const hasCanShareApi = typeof navigator.canShare === "function";
-    const canShareFile = hasCanShareApi ? navigator.canShare({ files: [file] }) : false;
-
-    if (hasShareApi && canShareFile) {
-      await navigator.share({
-        title: "거래내역서",
-        text: "거래내역서를 공유합니다.",
-        files: [file]
-      });
-      return;
-    }
-
-    showToast("이 환경에서는 PDF 파일 공유를 지원하지 않습니다. 휴대폰의 GitHub Pages 앱 화면에서 다시 시도하거나 PDF 저장 버튼을 이용해주세요.");
-  } catch (error) {
-    if (error && error.name === "AbortError") return;
-    console.error("공유 실패", error);
-    showToast("공유에 실패했습니다. PDF 저장 버튼을 이용해주세요.");
-  }
 }
 
 function bindExpenseForm() {
@@ -1724,7 +1688,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("closeReportBtn").addEventListener("click", closeSettlementStatement);
   document.getElementById("savePdfBtn").addEventListener("click", downloadSettlementPdf);
   document.getElementById("printReportBtn").addEventListener("click", printSettlementStatement);
-  document.getElementById("shareReportBtn").addEventListener("click", shareSettlementStatement);
   document.getElementById("settlementStatementModal").addEventListener("click", (event) => {
     if (event.target.id === "settlementStatementModal") closeSettlementStatement();
   });

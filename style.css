@@ -889,8 +889,8 @@ input[type="file"] { display: none; }
 
 .report-toolbar {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
   width: 100%;
   padding: 12px;
   box-sizing: border-box;
@@ -911,12 +911,12 @@ input[type="file"] { display: none; }
   position: relative !important;
   height: 48px;
   min-height: 48px;
-  padding: 0 12px;
+  padding: 0 6px;
   color: #ffffff !important;
   background: linear-gradient(135deg, #21b8ef, #7654f6);
   border: none;
   border-radius: 16px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -1193,7 +1193,7 @@ input[type="file"] { display: none; }
   }
 
   .report-toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .statement-header {
