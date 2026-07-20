@@ -631,6 +631,12 @@ function renderSettlementView() {
   currentSettlementReport = buildSettlementReportData();
   window.jeilcraneSettlementReport = currentSettlementReport;
 
+  const settlementStatementBtn = document.getElementById("settlementStatementBtn");
+  if (settlementStatementBtn) {
+    const shouldShow = selectedSettlementCustomer !== "all" && currentSettlementReport.jobs.length > 0;
+    settlementStatementBtn.classList.toggle("hidden", !shouldShow);
+  }
+
   const { summary, customerSummaries, jobs } = currentSettlementReport;
 
   document.getElementById("settlementSummary").innerHTML = [
@@ -664,39 +670,151 @@ function renderSettlementView() {
 
   document.getElementById("settlementCustomers").innerHTML = customerItems || '<p class="muted">선택한 조건의 거래처 합계가 없습니다.</p>';
 
-  const jobItems = jobs
-    .map((job) => {
-      const amountValue = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
-      const amountText = formatAmountForList(amountValue);
-      const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
-      const statusClass = statusText === "수금완료" || statusText === "지급완료" ? "completed" : "pending";
+  const groupedJobs = jobs.reduce((groups, job) => {
+    const key = job.date || "미지정";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(job);
+    return groups;
+  }, {});
 
-      return `
-        <article class="list-item job-list-item settlement-job-card">
-          <div class="job-card-main">
-            <div class="job-card-header">
-              <strong class="job-title">${escapeHtml(job.siteName || "현장 미입력")}</strong>
-            </div>
-            <div class="job-card-meta">
-              <span>📅 ${escapeHtml(job.date || "")}</span>
-              <span>🚛 ${escapeHtml(job.jobType)}</span>
-              ${job.workTime ? `<span>🕒 ${escapeHtml(job.workTime)}</span>` : ""}
-              <span>🏢 ${escapeHtml(job.customerName || job.providerName || "정보 없음")}</span>
-            </div>
-            <div class="job-card-finance">
-              <div class="job-amount-row">
-                <span class="job-card-label">💰</span>
-                <span class="job-amount">${escapeHtml(amountText)}</span>
-              </div>
-              <span class="pill ${statusClass}">${escapeHtml(statusText)}</span>
-            </div>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
+  const sortedDates = Object.keys(groupedJobs).sort((a, b) => a.localeCompare(b));
+
+  const jobItems = sortedDates.map((dateKey) => {
+    const dateJobs = groupedJobs[dateKey].slice().sort((a, b) => (a.siteName || "").localeCompare(b.siteName || ""));
+    const daySales = dateJobs
+      .filter((job) => job.jobType === "내 장비 작업")
+      .reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
+
+    return `
+      <section class="settlement-day-group">
+        <div class="settlement-day-header">
+          <strong>${escapeHtml(dateKey)}</strong>
+          <span class="pill">일매출 ${escapeHtml(formatAmountForList(daySales))}</span>
+        </div>
+        <div class="settlement-day-items">
+          ${dateJobs.map((job) => {
+            const amountValue = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+            const amountText = formatAmountForList(amountValue);
+            const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
+            const statusClass = statusText === "수금완료" || statusText === "지급완료" ? "completed" : "pending";
+
+            return `
+              <article class="list-item job-list-item settlement-job-card">
+                <div class="job-card-main">
+                  <div class="job-card-header">
+                    <strong class="job-title">${escapeHtml(job.siteName || "현장 미입력")}</strong>
+                  </div>
+                  <div class="job-card-meta">
+                    <span>🚛 ${escapeHtml(job.jobType)}</span>
+                    ${job.workTime ? `<span>🕒 ${escapeHtml(job.workTime)}</span>` : ""}
+                    <span>🏢 ${escapeHtml(job.customerName || job.providerName || "정보 없음")}</span>
+                  </div>
+                  <div class="job-card-content">
+                    <span class="job-card-label">📝</span>
+                    <p>${escapeHtml(job.workContent || "작업내용 없음")}</p>
+                  </div>
+                  <div class="job-card-finance">
+                    <div class="job-amount-row">
+                      <span class="job-card-label">💰</span>
+                      <span class="job-amount">${escapeHtml(amountText)}</span>
+                    </div>
+                    <span class="pill ${statusClass}">${escapeHtml(statusText)}</span>
+                  </div>
+                </div>
+              </article>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    `;
+  }).join("");
 
   document.getElementById("settlementJobList").innerHTML = jobItems || '<p class="muted">선택한 조건의 작업이 없습니다.</p>';
+}
+
+function buildSettlementStatementHtml(report) {
+  const companyInfo = state.companyInfo || getDefaultCompanyInfo();
+  const selectedCustomer = state.customers.find((customer) => customer.id === report.filters.customerId);
+  const customerName = selectedCustomer?.name || report.filters.customerName || "선택된 거래처";
+  const periodLabel = report.filters.period === "custom"
+    ? `${report.filters.range?.startKey || ""}${report.filters.range?.startKey && report.filters.range?.endKey ? " ~ " : ""}${report.filters.range?.endKey || ""}`
+    : (report.filters.period === "this-month" ? "이번 달" : report.filters.period === "last-month" ? "지난 달" : report.filters.period === "this-year" ? "올해" : report.filters.period === "all" ? "전체" : "기간 선택");
+  const rows = report.jobs
+    .slice()
+    .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+    .map((job) => `
+      <tr>
+        <td>${escapeHtml(job.date || "")}</td>
+        <td>${escapeHtml(job.siteName || "현장 미입력")}</td>
+        <td>${escapeHtml(job.workContent || "작업내용 없음")}</td>
+        <td>${escapeHtml(formatCurrency(job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0)))}</td>
+      </tr>
+    `)
+    .join("");
+
+  if (!rows) {
+    return `
+      <div class="settlement-statement-empty">
+        <p>선택한 거래처와 기간에 해당하는 작업이 없습니다.</p>
+      </div>
+    `;
+  }
+
+  const totalAmount = report.jobs.reduce((sum, job) => sum + (job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0)), 0);
+
+  return `
+    <div class="invoice-content">
+      <div class="invoice-header">
+        <div class="invoice-title-block">
+          <h2 class="invoice-title">거래내역서</h2>
+          <div class="invoice-meta-line">
+            <span>회사명: ${escapeHtml(companyInfo.companyName || "제일크레인")}</span>
+            <span>조회기간: ${escapeHtml(periodLabel)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="invoice-company">
+        <div class="invoice-company-info">
+          <div class="invoice-company-item">거래처명: ${escapeHtml(customerName)}</div>
+          <div class="invoice-company-item">대표자: ${escapeHtml(companyInfo.representativeName || "정보 없음")}</div>
+          <div class="invoice-company-item">전화번호: ${escapeHtml(companyInfo.phone || "정보 없음")}</div>
+        </div>
+      </div>
+      <table class="settlement-statement-table">
+        <thead>
+          <tr>
+            <th>날짜</th>
+            <th>현장명</th>
+            <th>작업내용</th>
+            <th>금액</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="invoice-total">작업건수: ${escapeHtml(String(report.jobs.length))}건 / 합계금액: ${escapeHtml(formatCurrency(totalAmount))}</p>
+    </div>
+  `;
+}
+
+function openSettlementStatement() {
+  if (!currentSettlementReport || currentSettlementReport.jobs.length === 0) {
+    showToast("선택한 조건의 작업이 없어 출력할 수 없습니다.");
+    return;
+  }
+
+  const content = buildSettlementStatementHtml(currentSettlementReport);
+  document.getElementById("settlementStatementContent").innerHTML = content;
+  document.getElementById("settlementStatementModal").classList.remove("hidden");
+  document.getElementById("settlementStatementModal").setAttribute("aria-hidden", "false");
+}
+
+function closeSettlementStatement() {
+  document.getElementById("settlementStatementModal").classList.add("hidden");
+  document.getElementById("settlementStatementModal").setAttribute("aria-hidden", "true");
+}
+
+function printSettlementStatement() {
+  window.print();
 }
 
 function bindExpenseForm() {
@@ -1176,6 +1294,12 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("exportBtn").addEventListener("click", exportBackup);
   document.getElementById("importFile").addEventListener("change", importBackup);
   document.getElementById("closeInvoiceBtn").addEventListener("click", closeInvoice);
+  document.getElementById("settlementStatementBtn").addEventListener("click", openSettlementStatement);
+  document.getElementById("closeSettlementStatementBtn").addEventListener("click", closeSettlementStatement);
+  document.getElementById("printSettlementStatementBtn").addEventListener("click", printSettlementStatement);
+  document.getElementById("settlementStatementModal").addEventListener("click", (event) => {
+    if (event.target.id === "settlementStatementModal") closeSettlementStatement();
+  });
   document.getElementById("backToMainBtn").addEventListener("click", () => {
     closeInvoice();
     setView("jobs");
