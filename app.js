@@ -6,6 +6,7 @@ let calendarViewDate = new Date();
 let selectedSettlementPeriod = "this-month";
 let selectedSettlementCustomer = "all";
 let currentSettlementReport = null;
+let editingJobId = null;
 
 function getDefaultCompanyInfo() {
   return {
@@ -240,9 +241,66 @@ function toggleJobTypeFields() {
   }
 }
 
+function setJobFormMode(isEditMode) {
+  const title = document.getElementById("jobFormTitle");
+  const submitButton = document.getElementById("jobSubmitBtn");
+  const cancelButton = document.getElementById("jobEditCancelBtn");
+
+  if (title) title.textContent = isEditMode ? "작업 수정" : "작업 등록";
+  if (submitButton) submitButton.textContent = isEditMode ? "수정 완료" : "작업 저장";
+  if (cancelButton) cancelButton.classList.toggle("hidden", !isEditMode);
+}
+
+function resetJobFormToCreateMode() {
+  const form = document.getElementById("jobForm");
+  editingJobId = null;
+  if (form) form.reset();
+  setTodayDefaults();
+  toggleJobTypeFields();
+  setJobFormMode(false);
+}
+
+function startJobEdit(job) {
+  if (!job) return;
+  const customerSelect = document.getElementById("jobCustomer");
+  const matchedCustomerByName = state.customers.find((customer) => customer.name === job.customerName);
+  const customerId = state.customers.some((customer) => customer.id === job.customerId)
+    ? job.customerId
+    : (matchedCustomerByName ? matchedCustomerByName.id : "");
+
+  editingJobId = job.id;
+  setView("jobs");
+
+  document.getElementById("jobDate").value = job.date || getToday();
+  document.getElementById("jobSite").value = job.siteName || "";
+  document.getElementById("jobWork").value = job.workContent || "";
+  document.getElementById("jobWorkTime").value = job.workTime || "";
+  if (customerSelect) customerSelect.value = customerId;
+  document.getElementById("jobType").value = job.jobType || "내 장비 작업";
+  document.getElementById("jobMemo").value = job.memo || "";
+  document.getElementById("salesAmount").value = Number(job.salesAmount || 0) || "";
+  document.getElementById("receivableStatus").value = job.receivableStatus || "미수";
+  document.getElementById("invoiceIssued").value = job.invoiceIssued || "미발행";
+  document.getElementById("providerName").value = job.providerName || "";
+  document.getElementById("payoutAmount").value = Number(job.payoutAmount || 0) || "";
+  document.getElementById("payoutStatus").value = job.payoutStatus || "미지급";
+
+  toggleJobTypeFields();
+  setJobFormMode(true);
+  document.getElementById("jobSite").focus();
+}
+
 function bindForm() {
   const form = document.getElementById("jobForm");
+  const cancelEditButton = document.getElementById("jobEditCancelBtn");
   document.getElementById("jobType").addEventListener("change", toggleJobTypeFields);
+
+  if (cancelEditButton) {
+    cancelEditButton.addEventListener("click", () => {
+      resetJobFormToCreateMode();
+      showToast("작업 수정을 취소했습니다.");
+    });
+  }
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -259,10 +317,18 @@ function bindForm() {
       return;
     }
 
+    const currentEditId = editingJobId;
+    const existingJob = currentEditId ? state.jobs.find((job) => job.id === currentEditId) : null;
+    if (currentEditId && !existingJob) {
+      showToast("수정할 작업을 찾지 못했습니다.");
+      resetJobFormToCreateMode();
+      return;
+    }
+
     const selectedCustomer = state.customers.find((customer) => customer.id === customerId);
     const jobType = document.getElementById("jobType").value;
     const record = {
-      id: createId("job"),
+      id: existingJob ? existingJob.id : createId("job"),
       date: document.getElementById("jobDate").value || getToday(),
       siteName,
       workContent: document.getElementById("jobWork").value.trim(),
@@ -271,27 +337,42 @@ function bindForm() {
       customerId: selectedCustomer ? selectedCustomer.id : "",
       jobType,
       memo: document.getElementById("jobMemo").value.trim(),
-      status: "진행중",
-      createdAt: new Date().toISOString()
+      status: existingJob ? (existingJob.status || "진행중") : "진행중",
+      createdAt: existingJob ? (existingJob.createdAt || new Date().toISOString()) : new Date().toISOString()
     };
 
     if (jobType === "배차 작업") {
       record.providerName = document.getElementById("providerName").value.trim();
       record.payoutAmount = Number(document.getElementById("payoutAmount").value || 0);
       record.payoutStatus = document.getElementById("payoutStatus").value;
+      delete record.salesAmount;
+      delete record.receivableStatus;
+      delete record.invoiceIssued;
     } else {
       record.salesAmount = Number(document.getElementById("salesAmount").value || 0);
       record.receivableStatus = document.getElementById("receivableStatus").value;
       record.invoiceIssued = document.getElementById("invoiceIssued").value;
+      delete record.providerName;
+      delete record.payoutAmount;
+      delete record.payoutStatus;
     }
 
-    state.jobs.unshift(record);
+    if (existingJob) {
+      const targetIndex = state.jobs.findIndex((job) => job.id === existingJob.id);
+      if (targetIndex === -1) {
+        showToast("수정할 작업을 찾지 못했습니다.");
+        resetJobFormToCreateMode();
+        return;
+      }
+      state.jobs[targetIndex] = record;
+    } else {
+      state.jobs.unshift(record);
+    }
+
     saveState();
     renderAll();
-    form.reset();
-    setTodayDefaults();
-    toggleJobTypeFields();
-    showToast("작업이 저장되었습니다.");
+    resetJobFormToCreateMode();
+    showToast(existingJob ? "작업이 수정되었습니다." : "작업이 저장되었습니다.");
   });
 }
 
@@ -1196,7 +1277,7 @@ function renderJobList() {
           </div>
         </div>
         <div class="job-card-actions">
-          <button class="tiny-btn" data-action="invoice" data-id="${escapeHtml(job.id)}">거래명세서</button>
+          <button class="tiny-btn" data-action="edit" data-id="${escapeHtml(job.id)}">수정</button>
           <button class="tiny-btn danger" data-action="delete" data-id="${escapeHtml(job.id)}">삭제</button>
         </div>
       </article>
@@ -1214,6 +1295,16 @@ function handleListActions(event) {
   if (action === "show-customer") {
     selectedCustomerId = id;
     renderCustomersView();
+    return;
+  }
+
+  if (action === "edit") {
+    const job = state.jobs.find((item) => item.id === id);
+    if (!job) {
+      showToast("수정할 작업을 찾지 못했습니다.");
+      return;
+    }
+    startJobEdit(job);
     return;
   }
 
@@ -1380,6 +1471,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setTodayDefaults();
   toggleJobTypeFields();
   toggleCustomerQuickAdd(false);
+  setJobFormMode(false);
   populateSettingsForm();
   showSettingsSection("company");
   renderAll();

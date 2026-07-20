@@ -46,7 +46,7 @@
         <section id="jobsView" class="view">
           <div class="card">
             <div class="section-header">
-              <h3>작업 등록</h3>
+              <h3 id="jobFormTitle">작업 등록</h3>
               <span class="muted">현장 · 작업 · 정산</span>
             </div>
             <form id="jobForm" class="form-grid">
@@ -152,7 +152,10 @@
                 <label for="jobMemo">메모</label>
                 <textarea id="jobMemo" rows="3" placeholder="현장 메모를 남겨주세요."></textarea>
               </div>
-              <button class="primary-btn full" type="submit">작업 저장</button>
+              <div id="jobFormActionRow" class="inline-actions full">
+                <button id="jobSubmitBtn" class="primary-btn" type="submit">작업 저장</button>
+                <button id="jobEditCancelBtn" class="ghost-btn hidden" type="button">수정 취소</button>
+              </div>
             </form>
           </div>
 

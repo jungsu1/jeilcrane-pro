@@ -652,6 +652,11 @@ input[type="file"] { display: none; }
   align-items: center;
 }
 
+#jobFormActionRow .primary-btn,
+#jobFormActionRow .ghost-btn {
+  flex: 1;
+}
+
 .customer-quick-add {
   margin-top: 8px;
   padding: 10px;
