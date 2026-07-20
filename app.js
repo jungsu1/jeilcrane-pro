@@ -194,6 +194,39 @@ function bindNavigation() {
   });
 }
 
+function bindSettingsCards() {
+  const sectionMap = {
+    "open-customer-management": "customer",
+    "open-company-settings": "company",
+    "open-backup-view": "backup",
+    "open-app-info": "app"
+  };
+
+  document.querySelectorAll(".settings-menu-card").forEach((button) => {
+    button.addEventListener("click", () => {
+      const section = sectionMap[button.dataset.action];
+      if (!section) return;
+      setView("settings");
+      showSettingsSection(section);
+    });
+  });
+}
+
+function showSettingsSection(sectionName) {
+  const sections = {
+    customer: document.getElementById("settingsCustomerSection"),
+    company: document.getElementById("settingsCompanySection"),
+    backup: document.getElementById("settingsBackupSection"),
+    app: document.getElementById("settingsAppInfoSection")
+  };
+
+  Object.entries(sections).forEach(([key, element]) => {
+    if (element) {
+      element.classList.toggle("hidden", key !== sectionName);
+    }
+  });
+}
+
 function toggleJobTypeFields() {
   const type = document.getElementById("jobType").value;
   const equipment = document.getElementById("equipmentFields");
@@ -1286,6 +1319,7 @@ const state = loadState();
 document.addEventListener("DOMContentLoaded", () => {
   bindNavigation();
   bindForm();
+  bindSettingsCards();
   bindSettingsForm();
   bindCustomerForms();
   bindExpenseForm();
@@ -1347,6 +1381,7 @@ document.addEventListener("DOMContentLoaded", () => {
   toggleJobTypeFields();
   toggleCustomerQuickAdd(false);
   populateSettingsForm();
+  showSettingsSection("company");
   renderAll();
   setView("dashboard");
   registerServiceWorker();
