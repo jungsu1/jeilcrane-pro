@@ -147,6 +147,36 @@ function formatAmountForList(value) {
   return `${amount.toLocaleString("ko-KR")}원`;
 }
 
+function getCompanyInfo() {
+  const defaults = getDefaultCompanyInfo();
+  const stateInfo = state?.companyInfo || {};
+  let storedInfo = {};
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && parsed.companyInfo && typeof parsed.companyInfo === "object") {
+        storedInfo = parsed.companyInfo;
+      }
+    }
+  } catch (error) {
+    console.warn("회사정보 조회 실패", error);
+  }
+
+  const merged = { ...storedInfo, ...stateInfo };
+  const pick = (...values) => values.map((value) => String(value ?? "").trim()).find(Boolean) || "";
+
+  return {
+    companyName: pick(merged.companyName, merged.name, merged.companyNameKo) || defaults.companyName,
+    representativeName: pick(merged.representativeName, merged.representative, merged.ownerName, merged.ceo),
+    phone: pick(merged.phone, merged.phoneNumber, merged.tel, merged.telephone),
+    businessNumber: pick(merged.businessNumber, merged.businessNo, merged.registrationNumber, merged.businessRegistrationNumber),
+    address: pick(merged.address, merged.companyAddress, merged.addr),
+    email: pick(merged.email, merged.mail)
+  };
+}
+
 function showToast(message) {
   const toast = document.getElementById("toast");
   toast.textContent = message;
@@ -847,7 +877,7 @@ function renderSettlementView() {
 }
 
 function buildSettlementStatementHtml(report) {
-  const companyInfo = state.companyInfo || getDefaultCompanyInfo();
+  const companyInfo = getCompanyInfo();
   const selectedCustomer = state.customers.find((customer) => customer.id === report.filters.customerId);
   const customerName = selectedCustomer?.name || report.filters.customerName || "선택된 거래처";
   const periodLabel = report.filters.period === "custom"
@@ -864,17 +894,18 @@ function buildSettlementStatementHtml(report) {
 
   const rows = sortedJobs
     .map((job) => {
-      const amount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
-      const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
-      const isCompleted = statusText === "수금완료" || statusText === "지급완료";
+      const supplyAmount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+      const vatAmount = Math.round(supplyAmount * 0.1);
+      const totalAmount = supplyAmount + vatAmount;
 
       return `
         <tr class="statement-row">
           <td class="date-cell">${escapeHtml(job.date || "")}</td>
           <td class="site-cell">${escapeHtml(job.siteName || "현장 미입력")}</td>
           <td class="work-cell">${escapeHtml(job.workContent || "작업내용 없음")}</td>
-          <td class="amount-cell">${escapeHtml(formatCurrency(amount))}</td>
-          <td class="status-cell ${isCompleted ? "is-done" : "is-pending"}">${escapeHtml(statusText)}</td>
+          <td class="amount-cell">${escapeHtml(formatCurrency(supplyAmount))}</td>
+          <td class="amount-cell">${escapeHtml(formatCurrency(vatAmount))}</td>
+          <td class="amount-cell">${escapeHtml(formatCurrency(totalAmount))}</td>
         </tr>
       `;
     })
@@ -888,13 +919,15 @@ function buildSettlementStatementHtml(report) {
     `;
   }
 
-  const totalAmount = sortedJobs.reduce((sum, job) => sum + (job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0)), 0);
-  const collectedAmount = sortedJobs.reduce((sum, job) => {
+  const totalSupplyAmount = sortedJobs.reduce((sum, job) => {
     const amount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
-    const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
-    return (statusText === "수금완료" || statusText === "지급완료") ? sum + amount : sum;
+    return sum + amount;
   }, 0);
-  const outstandingAmount = totalAmount - collectedAmount;
+  const totalVatAmount = sortedJobs.reduce((sum, job) => {
+    const amount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+    return sum + Math.round(amount * 0.1);
+  }, 0);
+  const totalGrandAmount = totalSupplyAmount + totalVatAmount;
 
   return `
       <div class="report-scale-wrapper">
@@ -910,11 +943,11 @@ function buildSettlementStatementHtml(report) {
           <section class="statement-parties">
             <div class="statement-party-box">
               <h3>공급자 정보</h3>
-              <div>상호: ${escapeHtml(companyInfo.companyName || "제일크레인")}</div>
+              <div>상호: ${escapeHtml(companyInfo.companyName || "-")}</div>
               <div>대표자: ${escapeHtml(companyInfo.representativeName || "-")}</div>
               <div>연락처: ${escapeHtml(companyInfo.phone || "-")}</div>
-              ${companyInfo.businessNumber ? `<div>사업자번호: ${escapeHtml(companyInfo.businessNumber)}</div>` : ""}
-              ${companyInfo.address ? `<div>주소: ${escapeHtml(companyInfo.address)}</div>` : ""}
+              <div>사업자번호: ${escapeHtml(companyInfo.businessNumber || "-")}</div>
+              <div>주소: ${escapeHtml(companyInfo.address || "-")}</div>
             </div>
             <div class="statement-party-box">
               <h3>공급받는 자 정보</h3>
@@ -926,28 +959,30 @@ function buildSettlementStatementHtml(report) {
 
           <table class="settlement-a4-table">
             <colgroup>
-              <col style="width:18%" />
+              <col style="width:14%" />
+              <col style="width:21%" />
               <col style="width:25%" />
-              <col style="width:32%" />
-              <col style="width:17%" />
-              <col style="width:8%" />
+              <col style="width:14%" />
+              <col style="width:12%" />
+              <col style="width:14%" />
             </colgroup>
             <thead>
               <tr>
                 <th>날짜</th>
                 <th>현장명</th>
                 <th>작업내용</th>
-                <th>금액</th>
-                <th>수금상태</th>
+                <th>공급가액</th>
+                <th>부가세</th>
+                <th>합계금액</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
 
           <footer class="statement-total-box">
-            <div><span>총 거래금액</span><strong>${escapeHtml(formatCurrency(totalAmount))}</strong></div>
-            <div><span>수금완료 금액</span><strong>${escapeHtml(formatCurrency(collectedAmount))}</strong></div>
-            <div><span>미수금</span><strong>${escapeHtml(formatCurrency(outstandingAmount))}</strong></div>
+            <div><span>공급가액 합계</span><strong>${escapeHtml(formatCurrency(totalSupplyAmount))}</strong></div>
+            <div><span>부가세 합계</span><strong>${escapeHtml(formatCurrency(totalVatAmount))}</strong></div>
+            <div><span>총 합계금액</span><strong>${escapeHtml(formatCurrency(totalGrandAmount))}</strong></div>
           </footer>
         </article>
       </div>
