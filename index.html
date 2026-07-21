@@ -294,6 +294,22 @@
                 <button id="expenseEditCancelBtn" class="ghost-btn hidden" type="button">수정 취소</button>
               </div>
             </form>
+
+            <div class="section-header">
+              <h3>지출 조회</h3>
+              <span class="muted">기간별 지출 현황</span>
+            </div>
+            <div class="period-selector expense-period-selector" role="group" aria-label="지출 조회 기간 선택">
+              <button type="button" class="period-btn active" data-expense-period="this-month">이번달</button>
+              <button type="button" class="period-btn" data-expense-period="last-month">지난달</button>
+              <button type="button" class="period-btn" data-expense-period="custom">기간선택</button>
+            </div>
+            <div id="expenseCustomPeriodRow" class="custom-period-row hidden">
+              <div class="form-group">
+                <label for="expenseFilterMonth">조회 월</label>
+                <input id="expenseFilterMonth" type="month" />
+              </div>
+            </div>
             <div id="expenseSummary" class="metric-grid compact-grid"></div>
             <div id="expenseList" class="stack-list"></div>
           </div>

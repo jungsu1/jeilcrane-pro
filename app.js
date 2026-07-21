@@ -8,6 +8,7 @@ let selectedSettlementCustomer = "all";
 let currentSettlementReport = null;
 let isSettlementOutstandingOpen = false;
 let isSettlementExpenseOpen = false;
+let selectedExpensePeriod = "this-month";
 let editingJobId = null;
 let pendingDeleteJobId = null;
 let editingExpenseId = null;
@@ -204,6 +205,12 @@ function getToday() {
 function getCurrentMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getLastMonth() {
+  const now = new Date();
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function getInvoiceDateKey() {
@@ -806,6 +813,30 @@ function updateSettlementPeriodUI() {
   if (customPeriodRow) {
     customPeriodRow.classList.toggle("hidden", selectedSettlementPeriod !== "custom");
   }
+}
+
+function updateExpensePeriodUI() {
+  document.querySelectorAll("[data-expense-period]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.expensePeriod === selectedExpensePeriod);
+  });
+
+  const customRow = document.getElementById("expenseCustomPeriodRow");
+  if (customRow) {
+    customRow.classList.toggle("hidden", selectedExpensePeriod !== "custom");
+  }
+}
+
+function getSelectedExpenseMonth() {
+  if (selectedExpensePeriod === "last-month") {
+    return getLastMonth();
+  }
+
+  if (selectedExpensePeriod === "custom") {
+    const monthInput = document.getElementById("expenseFilterMonth");
+    return monthInput?.value || getCurrentMonth();
+  }
+
+  return getCurrentMonth();
 }
 
 function getSettlementJobAmount(job) {
@@ -1701,7 +1732,13 @@ function renderExpensesView() {
   const expenseList = document.getElementById("expenseList");
   if (!expenseSummary || !expenseList) return;
 
-  const sortedExpenses = state.expenses
+  updateExpensePeriodUI();
+
+  const targetMonth = getSelectedExpenseMonth();
+  const filteredExpenses = state.expenses
+    .filter((expense) => String(expense.date || "").startsWith(targetMonth));
+
+  const sortedExpenses = filteredExpenses
     .slice()
     .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const totalExpense = sortedExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
@@ -2319,6 +2356,27 @@ document.addEventListener("DOMContentLoaded", () => {
       renderSettlementView();
     });
   });
+
+  document.querySelectorAll("[data-expense-period]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedExpensePeriod = button.dataset.expensePeriod || "this-month";
+      renderExpensesView();
+    });
+  });
+
+  const expenseFilterMonthInput = document.getElementById("expenseFilterMonth");
+  if (expenseFilterMonthInput) {
+    if (!expenseFilterMonthInput.value) {
+      expenseFilterMonthInput.value = getCurrentMonth();
+    }
+
+    expenseFilterMonthInput.addEventListener("change", () => {
+      if (selectedExpensePeriod !== "custom") {
+        selectedExpensePeriod = "custom";
+      }
+      renderExpensesView();
+    });
+  }
 
   const customerSelect = document.getElementById("settlementCustomerSelect");
   if (customerSelect) {
