@@ -326,12 +326,20 @@ function bindNavigation() {
 }
 
 function bindSettingsCards() {
-  document.querySelectorAll(".settings-card").forEach((card) => {
+  const actionToSection = {
+    "open-customer-management": "customer",
+    "open-company-settings": "company",
+    "open-backup-view": "backup",
+    "open-app-info": "app"
+  };
+
+  document.querySelectorAll(".settings-menu-card").forEach((card) => {
     card.addEventListener("click", () => {
-      const section = card.dataset.section;
+      const section = actionToSection[card.dataset.action];
       if (!section) return;
       setView("settings");
       showSettingsSection(section);
+      card.blur();
     });
   });
 }
