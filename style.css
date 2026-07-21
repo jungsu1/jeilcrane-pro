@@ -352,6 +352,10 @@ input[type="file"] { display: none; }
   gap: 10px;
 }
 
+.expense-card-actions {
+  min-width: 124px;
+}
+
 .value-block {
   display: flex;
   flex-direction: column;
@@ -530,6 +534,108 @@ input[type="file"] { display: none; }
   min-height: 98px;
 }
 
+.settlement-summary-btn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.settlement-summary-btn.open {
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.45);
+}
+
+.settlement-outstanding-panel {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.settlement-outstanding-group {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.settlement-outstanding-group h4 {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+
+.settlement-outstanding-item {
+  align-items: center;
+}
+
+.settlement-outstanding-subtotal,
+.settlement-outstanding-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 0.9rem;
+}
+
+.settlement-outstanding-total {
+  margin-top: 2px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.settlement-expense-panel {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.settlement-expense-group {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.settlement-expense-group h4 {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+
+.settlement-expense-item {
+  align-items: center;
+}
+
+.settlement-expense-subtotal,
+.settlement-expense-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 0.9rem;
+}
+
+.settlement-expense-total {
+  margin-top: 2px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 12px;
+  padding: 10px;
+}
+
 .settlement-card-item {
   align-items: center;
   padding: 12px 0;
@@ -658,6 +764,11 @@ input[type="file"] { display: none; }
 
 #jobFormActionRow .primary-btn,
 #jobFormActionRow .ghost-btn {
+  flex: 1;
+}
+
+#expenseFormActionRow .primary-btn,
+#expenseFormActionRow .ghost-btn {
   flex: 1;
 }
 

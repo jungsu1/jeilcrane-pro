@@ -6,8 +6,12 @@ let calendarViewDate = new Date();
 let selectedSettlementPeriod = "this-month";
 let selectedSettlementCustomer = "all";
 let currentSettlementReport = null;
+let isSettlementOutstandingOpen = false;
+let isSettlementExpenseOpen = false;
 let editingJobId = null;
 let pendingDeleteJobId = null;
+let editingExpenseId = null;
+let pendingDeleteExpenseId = null;
 
 function getDefaultCompanyInfo() {
   return {
@@ -804,6 +808,199 @@ function updateSettlementPeriodUI() {
   }
 }
 
+function getSettlementJobAmount(job) {
+  return job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+}
+
+function getSettlementCollectionStatus(job) {
+  if (job.jobType === "배차 작업") {
+    return String(
+      job.payoutStatus
+      || job.receivableStatus
+      || job.collectionStatus
+      || job.receivable
+      || "미지급"
+    ).trim();
+  }
+
+  return String(
+    job.receivableStatus
+    || job.collectionStatus
+    || job.receivable
+    || job.payoutStatus
+    || "미수"
+  ).trim();
+}
+
+function isOutstandingReceivableJob(job) {
+  const status = getSettlementCollectionStatus(job);
+  if (status === "수금완료" || status === "지급완료") return false;
+  return status.includes("미수") || status.includes("미지급");
+}
+
+function sortJobsByDateAsc(a, b) {
+  const dateCompare = String(a.date || "").localeCompare(String(b.date || ""));
+  if (dateCompare !== 0) return dateCompare;
+  return String(a.siteName || "").localeCompare(String(b.siteName || ""));
+}
+
+function buildOutstandingReceivableDetailHtml(report) {
+  const outstandingJobs = report.jobs
+    .filter(isOutstandingReceivableJob)
+    .slice()
+    .sort(sortJobsByDateAsc);
+
+  if (!outstandingJobs.length) {
+    return `
+      <section class="settlement-outstanding-panel">
+        <p class="muted">선택한 기간의 미수 작업이 없습니다.</p>
+      </section>
+    `;
+  }
+
+  const renderJob = (job) => {
+    const amount = getSettlementJobAmount(job);
+    const statusText = getSettlementCollectionStatus(job);
+    const customerName = getJobCustomerName(job) || "미입력";
+    return `
+      <article class="list-item settlement-outstanding-item">
+        <div>
+          <strong>${escapeHtml(job.date || "-")} · ${escapeHtml(job.siteName || "현장 미입력")}</strong>
+          <p>${escapeHtml(job.workContent || "작업내용 없음")}</p>
+          <p class="muted">${escapeHtml(customerName)} · ${escapeHtml(job.jobType || "작업구분 미입력")}</p>
+        </div>
+        <div class="value-block">
+          <span class="pill pending">${escapeHtml(statusText)}</span>
+          <p>${escapeHtml(formatCurrency(amount))}</p>
+        </div>
+      </article>
+    `;
+  };
+
+  if (selectedSettlementCustomer === "all") {
+    const grouped = outstandingJobs.reduce((map, job) => {
+      const key = getJobCustomerName(job) || "미입력";
+      if (!map[key]) map[key] = [];
+      map[key].push(job);
+      return map;
+    }, {});
+
+    const customerNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, "ko"));
+    const totalOutstanding = outstandingJobs.reduce((sum, job) => sum + getSettlementJobAmount(job), 0);
+
+    const groups = customerNames.map((name) => {
+      const jobs = grouped[name].slice().sort(sortJobsByDateAsc);
+      const subtotal = jobs.reduce((sum, job) => sum + getSettlementJobAmount(job), 0);
+
+      return `
+        <section class="settlement-outstanding-group">
+          <h4>${escapeHtml(name)}</h4>
+          <div class="stack-list">
+            ${jobs.map(renderJob).join("")}
+          </div>
+          <div class="settlement-outstanding-subtotal">
+            <span>거래처 미수 합계</span>
+            <strong>${escapeHtml(formatCurrency(subtotal))}</strong>
+          </div>
+        </section>
+      `;
+    }).join("");
+
+    return `
+      <section class="settlement-outstanding-panel">
+        ${groups}
+        <div class="settlement-outstanding-total">
+          <span>전체 미수금 합계</span>
+          <strong>${escapeHtml(formatCurrency(totalOutstanding))}</strong>
+        </div>
+      </section>
+    `;
+  }
+
+  const selectedCustomerName = report.filters.customerName || "선택 거래처";
+  const subtotal = outstandingJobs.reduce((sum, job) => sum + getSettlementJobAmount(job), 0);
+
+  return `
+    <section class="settlement-outstanding-panel">
+      <section class="settlement-outstanding-group">
+        <h4>${escapeHtml(selectedCustomerName)}</h4>
+        <div class="stack-list">
+          ${outstandingJobs.map(renderJob).join("")}
+        </div>
+        <div class="settlement-outstanding-subtotal">
+          <span>거래처 미수 합계</span>
+          <strong>${escapeHtml(formatCurrency(subtotal))}</strong>
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function buildSettlementExpenseDetailHtml(report) {
+  const expenses = (Array.isArray(report.expenses) ? report.expenses : [])
+    .slice()
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+
+  if (!expenses.length) {
+    return `
+      <section class="settlement-expense-panel">
+        <p class="muted">선택한 기간의 지출 내역이 없습니다.</p>
+      </section>
+    `;
+  }
+
+  const grouped = expenses.reduce((map, expense) => {
+    const key = String(expense.category || "기타").trim() || "기타";
+    if (!map[key]) map[key] = [];
+    map[key].push(expense);
+    return map;
+  }, {});
+
+  const categoryNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, "ko"));
+  const totalExpenseAmount = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+
+  const groupsHtml = categoryNames.map((categoryName) => {
+    const items = grouped[categoryName]
+      .slice()
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+
+    const subtotal = items.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+
+    return `
+      <section class="settlement-expense-group">
+        <h4>${escapeHtml(categoryName)}</h4>
+        <div class="stack-list">
+          ${items.map((expense) => `
+            <article class="list-item settlement-expense-item">
+              <div>
+                <strong>${escapeHtml(expense.date || "-")} · ${escapeHtml(expense.category || "기타")}</strong>
+                <p>${escapeHtml(expense.memo || "내용 없음")}</p>
+              </div>
+              <div class="value-block">
+                <p>${escapeHtml(formatCurrency(expense.amount))}</p>
+              </div>
+            </article>
+          `).join("")}
+        </div>
+        <div class="settlement-expense-subtotal">
+          <span>항목 합계</span>
+          <strong>${escapeHtml(formatCurrency(subtotal))}</strong>
+        </div>
+      </section>
+    `;
+  }).join("");
+
+  return `
+    <section class="settlement-expense-panel">
+      ${groupsHtml}
+      <div class="settlement-expense-total">
+        <span>전체 지출 합계</span>
+        <strong>${escapeHtml(formatCurrency(totalExpenseAmount))}</strong>
+      </div>
+    </section>
+  `;
+}
+
 function buildSettlementReportData() {
   const range = getSettlementRange(selectedSettlementPeriod);
   const customerName = selectedSettlementCustomer === "all"
@@ -857,7 +1054,8 @@ function buildSettlementReportData() {
     },
     summary,
     customerSummaries: Array.from(customerMap.values()).sort((a, b) => b.totalAmount - a.totalAmount),
-    jobs: filteredJobs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+    jobs: filteredJobs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    expenses: filteredExpenses.slice()
   };
 }
 
@@ -895,19 +1093,56 @@ function renderSettlementView() {
 
   const { summary, customerSummaries, jobs } = currentSettlementReport;
 
-  document.getElementById("settlementSummary").innerHTML = [
+  const summaryItems = [
     { title: "작업건수", value: `${summary.jobCount}건` },
     { title: "총매출", value: formatCurrency(summary.totalSales) },
     { title: "수금완료", value: formatCurrency(summary.completedReceivable) },
-    { title: "미수금", value: formatCurrency(summary.outstandingReceivable) },
-    { title: "총지출", value: formatCurrency(summary.totalExpenses) },
+    {
+      title: "미수금",
+      value: formatCurrency(summary.outstandingReceivable),
+      action: "toggle-outstanding-details"
+    },
+    {
+      title: "총지출",
+      value: formatCurrency(summary.totalExpenses),
+      action: "toggle-expense-details"
+    },
     { title: "순이익", value: formatCurrency(summary.netProfit) }
-  ].map((item) => `
-    <div class="metric-card settlement-summary-card">
-      <h4>${escapeHtml(item.title)}</h4>
-      <strong>${escapeHtml(item.value)}</strong>
-    </div>
-  `).join("");
+  ];
+
+  const summaryActionState = {
+    "toggle-outstanding-details": isSettlementOutstandingOpen,
+    "toggle-expense-details": isSettlementExpenseOpen
+  };
+
+  const summaryCardsHtml = summaryItems.map((item) => {
+    if (item.action) {
+      const isOpen = Boolean(summaryActionState[item.action]);
+      return `
+        <button type="button" class="metric-card settlement-summary-card settlement-summary-btn ${isOpen ? "open" : ""}" data-action="${escapeHtml(item.action)}" aria-expanded="${isOpen ? "true" : "false"}">
+          <h4>${escapeHtml(item.title)}</h4>
+          <strong>${escapeHtml(item.value)}</strong>
+        </button>
+      `;
+    }
+
+    return `
+      <div class="metric-card settlement-summary-card">
+        <h4>${escapeHtml(item.title)}</h4>
+        <strong>${escapeHtml(item.value)}</strong>
+      </div>
+    `;
+  }).join("");
+
+  const outstandingDetailHtml = isSettlementOutstandingOpen
+    ? buildOutstandingReceivableDetailHtml(currentSettlementReport)
+    : "";
+
+  const expenseDetailHtml = isSettlementExpenseOpen
+    ? buildSettlementExpenseDetailHtml(currentSettlementReport)
+    : "";
+
+  document.getElementById("settlementSummary").innerHTML = `${summaryCardsHtml}${outstandingDetailHtml}${expenseDetailHtml}`;
 
   const customerItems = customerSummaries
     .map((customer) => `
@@ -1367,6 +1602,14 @@ function printSettlementStatement() {
 function bindExpenseForm() {
   const form = document.getElementById("expenseForm");
   if (!form) return;
+  const cancelEditButton = document.getElementById("expenseEditCancelBtn");
+
+  if (cancelEditButton) {
+    cancelEditButton.addEventListener("click", () => {
+      resetExpenseFormToCreateMode();
+      showToast("지출 수정을 취소했습니다.");
+    });
+  }
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1390,22 +1633,144 @@ function bindExpenseForm() {
       return;
     }
 
-    state.expenses.unshift({
-      id: createId("expense"),
+    const existingExpense = editingExpenseId
+      ? state.expenses.find((expense) => expense.id === editingExpenseId)
+      : null;
+
+    const record = {
+      id: existingExpense ? existingExpense.id : createId("expense"),
       date,
       category,
       amount,
       memo,
-      createdAt: new Date().toISOString()
-    });
+      createdAt: existingExpense ? (existingExpense.createdAt || new Date().toISOString()) : new Date().toISOString()
+    };
+
+    if (existingExpense) {
+      const index = state.expenses.findIndex((expense) => expense.id === existingExpense.id);
+      if (index === -1) {
+        showToast("수정할 지출을 찾지 못했습니다.");
+        resetExpenseFormToCreateMode();
+        return;
+      }
+      state.expenses[index] = record;
+    } else {
+      state.expenses.unshift(record);
+    }
 
     saveState();
     renderAll();
-    form.reset();
-    document.getElementById("expenseDate").value = date;
-    document.getElementById("expenseCategory").value = category;
-    showToast("지출이 저장되었습니다.");
+    resetExpenseFormToCreateMode();
+    showToast(existingExpense ? "지출이 수정되었습니다." : "지출이 저장되었습니다.");
   });
+}
+
+function setExpenseFormMode(isEditMode) {
+  const title = document.getElementById("expenseFormTitle");
+  const submitButton = document.getElementById("expenseSubmitBtn");
+  const cancelButton = document.getElementById("expenseEditCancelBtn");
+
+  if (title) title.textContent = isEditMode ? "지출 수정" : "지출 등록";
+  if (submitButton) submitButton.textContent = isEditMode ? "수정 완료" : "지출 저장";
+  if (cancelButton) cancelButton.classList.toggle("hidden", !isEditMode);
+}
+
+function resetExpenseFormToCreateMode() {
+  const form = document.getElementById("expenseForm");
+  editingExpenseId = null;
+  if (form) form.reset();
+  const dateField = document.getElementById("expenseDate");
+  if (dateField) dateField.value = getToday();
+  setExpenseFormMode(false);
+}
+
+function startExpenseEdit(expense) {
+  if (!expense) return;
+  editingExpenseId = expense.id;
+  setView("expenses");
+  document.getElementById("expenseDate").value = expense.date || getToday();
+  document.getElementById("expenseCategory").value = expense.category || "기타";
+  document.getElementById("expenseAmount").value = Number(expense.amount || 0) || "";
+  document.getElementById("expenseMemo").value = expense.memo || "";
+  setExpenseFormMode(true);
+  document.getElementById("expenseAmount").focus();
+}
+
+function renderExpensesView() {
+  const expenseSummary = document.getElementById("expenseSummary");
+  const expenseList = document.getElementById("expenseList");
+  if (!expenseSummary || !expenseList) return;
+
+  const sortedExpenses = state.expenses
+    .slice()
+    .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const totalExpense = sortedExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+
+  expenseSummary.innerHTML = [
+    { title: "총 지출", value: formatCurrency(totalExpense) },
+    { title: "등록 건수", value: `${sortedExpenses.length}건` }
+  ].map((item) => `
+    <div class="metric-card">
+      <h4>${escapeHtml(item.title)}</h4>
+      <strong>${escapeHtml(item.value)}</strong>
+    </div>
+  `).join("");
+
+  expenseList.innerHTML = sortedExpenses.length
+    ? sortedExpenses.map((expense) => `
+      <article class="list-item expense-list-item">
+        <div class="expense-item-main">
+          <div class="expense-item-top">
+            <strong>${escapeHtml(expense.category || "기타")}</strong>
+            <span class="expense-amount">${escapeHtml(formatCurrency(expense.amount))}</span>
+          </div>
+          <p>${escapeHtml(expense.date || "-")} · ${escapeHtml(expense.memo || "내용 없음")}</p>
+        </div>
+        <div class="job-card-actions expense-card-actions">
+          <button class="tiny-btn" data-action="edit-expense" data-id="${escapeHtml(expense.id)}">수정</button>
+          <button class="tiny-btn danger" data-action="delete-expense" data-id="${escapeHtml(expense.id)}">삭제</button>
+        </div>
+      </article>
+    `).join("")
+    : '<p class="muted">등록된 지출이 없습니다.</p>';
+}
+
+function openDeleteExpenseModal(expenseId) {
+  const expense = state.expenses.find((item) => item.id === expenseId);
+  if (!expense) {
+    showToast("삭제할 지출을 찾지 못했습니다.");
+    return;
+  }
+  pendingDeleteExpenseId = expenseId;
+  const modal = document.getElementById("deleteExpenseModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeDeleteExpenseModal() {
+  pendingDeleteExpenseId = null;
+  const modal = document.getElementById("deleteExpenseModal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+function confirmDeleteExpense() {
+  if (!pendingDeleteExpenseId) {
+    closeDeleteExpenseModal();
+    return;
+  }
+
+  const expenseIdToDelete = pendingDeleteExpenseId;
+  closeDeleteExpenseModal();
+  state.expenses = state.expenses.filter((expense) => expense.id !== expenseIdToDelete);
+  if (editingExpenseId === expenseIdToDelete) {
+    resetExpenseFormToCreateMode();
+  }
+  saveState();
+  renderAll();
+  showToast("지출이 삭제되었습니다.");
 }
 
 function renderDashboard() {
@@ -1774,6 +2139,18 @@ function handleListActions(event) {
     return;
   }
 
+  if (action === "toggle-outstanding-details") {
+    isSettlementOutstandingOpen = !isSettlementOutstandingOpen;
+    renderSettlementView();
+    return;
+  }
+
+  if (action === "toggle-expense-details") {
+    isSettlementExpenseOpen = !isSettlementExpenseOpen;
+    renderSettlementView();
+    return;
+  }
+
   if (action === "edit") {
     const job = state.jobs.find((item) => item.id === id);
     if (!job) {
@@ -1824,11 +2201,19 @@ function handleListActions(event) {
     return;
   }
 
+  if (action === "edit-expense") {
+    const expense = state.expenses.find((item) => item.id === id);
+    if (!expense) {
+      showToast("수정할 지출을 찾지 못했습니다.");
+      return;
+    }
+    startExpenseEdit(expense);
+    return;
+  }
+
   if (action === "delete-expense") {
-    state.expenses = state.expenses.filter((expense) => expense.id !== id);
-    saveState();
-    renderAll();
-    showToast("지출이 삭제되었습니다.");
+    openDeleteExpenseModal(id);
+    return;
   }
 }
 
@@ -1871,6 +2256,7 @@ function renderAll() {
   renderDashboard();
   renderCalendarView();
   renderJobList();
+  renderExpensesView();
   renderCustomersView();
   renderSettlementView();
   refreshSettlementStatementIfOpen();
@@ -1919,6 +2305,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("deleteJobModal").addEventListener("click", (event) => {
     if (event.target.id === "deleteJobModal") closeDeleteJobModal();
   });
+  document.getElementById("cancelDeleteExpenseBtn").addEventListener("click", closeDeleteExpenseModal);
+  document.getElementById("confirmDeleteExpenseBtn").addEventListener("click", confirmDeleteExpense);
+  document.getElementById("deleteExpenseModal").addEventListener("click", (event) => {
+    if (event.target.id === "deleteExpenseModal") closeDeleteExpenseModal();
+  });
   document.getElementById("invoiceModal").addEventListener("click", (event) => {
     if (event.target.id === "invoiceModal") closeInvoice();
   });
@@ -1958,6 +2349,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   setTodayDefaults();
   toggleJobTypeFields();
+  resetExpenseFormToCreateMode();
   toggleCustomerQuickAdd(false);
   setJobFormMode(false);
   populateSettingsForm();

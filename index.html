@@ -262,7 +262,7 @@
         <section id="expensesView" class="view">
           <div class="card">
             <div class="section-header">
-              <h3>지출</h3>
+              <h3 id="expenseFormTitle">지출 등록</h3>
               <span class="muted">지출 입력 및 관리</span>
             </div>
             <form id="expenseForm" class="form-grid expense-form">
@@ -286,10 +286,13 @@
                 <input id="expenseAmount" type="number" min="0" step="1000" placeholder="0" required />
               </div>
               <div class="form-group full">
-                <label for="expenseMemo">메모</label>
+                <label for="expenseMemo">내용</label>
                 <input id="expenseMemo" placeholder="예: 차량 주유비" />
               </div>
-              <button class="primary-btn full" type="submit">지출 저장</button>
+              <div id="expenseFormActionRow" class="inline-actions full">
+                <button id="expenseSubmitBtn" class="primary-btn" type="submit">지출 저장</button>
+                <button id="expenseEditCancelBtn" class="ghost-btn hidden" type="button">수정 취소</button>
+              </div>
             </form>
             <div id="expenseSummary" class="metric-grid compact-grid"></div>
             <div id="expenseList" class="stack-list"></div>
@@ -483,6 +486,18 @@
         <div class="confirm-actions">
           <button id="cancelDeleteJobBtn" type="button" class="ghost-btn">취소</button>
           <button id="confirmDeleteJobBtn" type="button" class="primary-btn danger-btn">삭제</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="deleteExpenseModal" class="modal hidden" aria-hidden="true">
+      <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteExpenseModalTitle">
+        <h3 id="deleteExpenseModalTitle">지출 삭제</h3>
+        <p>이 지출을 삭제하시겠습니까?</p>
+        <p class="confirm-warning">삭제 후 복구할 수 없습니다.</p>
+        <div class="confirm-actions">
+          <button id="cancelDeleteExpenseBtn" type="button" class="ghost-btn">취소</button>
+          <button id="confirmDeleteExpenseBtn" type="button" class="primary-btn danger-btn">삭제</button>
         </div>
       </div>
     </div>
