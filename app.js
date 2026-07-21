@@ -997,8 +997,33 @@ function buildSettlementStatementHtml(report) {
     : (report.filters.period === "this-month" ? "이번 달" : report.filters.period === "last-month" ? "지난 달" : report.filters.period === "this-year" ? "올해" : report.filters.period === "all" ? "전체" : "기간 선택");
 
   const issueDate = getToday();
-  const customerRepresentative = selectedCustomer?.representativeName || selectedCustomer?.representative || selectedCustomer?.ceoName || "";
-  const customerPhone = selectedCustomer?.phone || selectedCustomer?.tel || selectedCustomer?.telephone || "";
+  const pickCustomerField = (...values) => values.map((value) => String(value ?? "").trim()).find(Boolean) || "-";
+
+  const customerRepresentative = pickCustomerField(
+    selectedCustomer?.representativeName,
+    selectedCustomer?.representative,
+    selectedCustomer?.ceoName,
+    selectedCustomer?.manager
+  );
+  const customerPhone = pickCustomerField(
+    selectedCustomer?.phone,
+    selectedCustomer?.tel,
+    selectedCustomer?.telephone,
+    selectedCustomer?.mobile,
+    selectedCustomer?.managerPhone,
+    selectedCustomer?.contact
+  );
+  const customerBusinessNumber = pickCustomerField(
+    selectedCustomer?.businessNumber,
+    selectedCustomer?.businessNo,
+    selectedCustomer?.registrationNumber,
+    selectedCustomer?.businessRegistrationNumber
+  );
+  const customerAddress = pickCustomerField(
+    selectedCustomer?.address,
+    selectedCustomer?.companyAddress,
+    selectedCustomer?.addr
+  );
 
   const sortedJobs = report.jobs
     .slice()
@@ -1087,11 +1112,9 @@ function buildSettlementStatementHtml(report) {
 
   const equipmentTotals = getSectionTotals(equipmentJobs);
   const dispatchTotals = getSectionTotals(dispatchJobs);
-  const grandTotals = {
-    supply: equipmentTotals.supply + dispatchTotals.supply,
-    vat: equipmentTotals.vat + dispatchTotals.vat,
-    total: equipmentTotals.total + dispatchTotals.total
-  };
+  const settlementNetSupply = equipmentTotals.supply - dispatchTotals.supply;
+  const settlementVat = Math.round(settlementNetSupply * 0.1);
+  const settlementFinalTotal = settlementNetSupply + settlementVat;
 
   return `
       <div class="report-scale-wrapper">
@@ -1115,9 +1138,11 @@ function buildSettlementStatementHtml(report) {
             </div>
             <div class="statement-party-box">
               <h3>공급받는 자 정보</h3>
-              <div>거래처명: ${escapeHtml(customerName)}</div>
-              ${customerRepresentative ? `<div>대표자: ${escapeHtml(customerRepresentative)}</div>` : ""}
-              ${customerPhone ? `<div>연락처: ${escapeHtml(customerPhone)}</div>` : ""}
+              <div>거래처명: ${escapeHtml(customerName || "-")}</div>
+              <div>대표자/담당자: ${escapeHtml(customerRepresentative)}</div>
+              <div>연락처: ${escapeHtml(customerPhone)}</div>
+              <div>사업자번호: ${escapeHtml(customerBusinessNumber)}</div>
+              <div>주소: ${escapeHtml(customerAddress)}</div>
             </div>
           </section>
 
@@ -1125,10 +1150,10 @@ function buildSettlementStatementHtml(report) {
           ${buildSectionHtml("배차 작업", dispatchJobs, "배차 작업 없음", "배차 소계")}
 
           <footer class="statement-total-box">
-            <div class="statement-total-title">■ 총 합계</div>
-            <div><span>공급가액</span><strong>${escapeHtml(formatCurrency(grandTotals.supply))}</strong></div>
-            <div><span>부가세</span><strong>${escapeHtml(formatCurrency(grandTotals.vat))}</strong></div>
-            <div><span>총 합계금액</span><strong>${escapeHtml(formatCurrency(grandTotals.total))}</strong></div>
+            <div class="statement-total-title">■ 정산 합계</div>
+            <div><span>순 공급가액</span><strong>${escapeHtml(formatCurrency(settlementNetSupply))}</strong></div>
+            <div><span>부가세</span><strong>${escapeHtml(formatCurrency(settlementVat))}</strong></div>
+            <div><span>최종 합계</span><strong>${escapeHtml(formatCurrency(settlementFinalTotal))}</strong></div>
           </footer>
         </article>
       </div>

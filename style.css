@@ -989,7 +989,7 @@ input[type="file"] { display: none; }
   min-height: 297mm;
   height: auto;
   box-sizing: border-box;
-  padding: 15mm;
+  padding: 11mm;
   background: #ffffff;
   color: #111827;
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.2);
@@ -1007,10 +1007,10 @@ input[type="file"] { display: none; }
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 10mm;
+  gap: 7mm;
   border-bottom: 1px solid #d1d5db;
-  padding-bottom: 6mm;
-  margin-bottom: 6mm;
+  padding-bottom: 3.2mm;
+  margin-bottom: 3.2mm;
 }
 
 .statement-header h2 {
@@ -1021,35 +1021,36 @@ input[type="file"] { display: none; }
 
 .statement-meta {
   display: grid;
-  gap: 2mm;
+  gap: 1.2mm;
   text-align: right;
   font-size: 10pt;
 }
 
 .statement-parties {
   display: flex;
-  gap: 4mm;
-  margin-bottom: 6mm;
+  gap: 3mm;
+  margin-bottom: 3.2mm;
   align-items: stretch;
+  flex-wrap: nowrap;
 }
 
 .statement-party-box {
   flex: 1 1 0;
   border: 1px solid #d1d5db;
   border-radius: 3mm;
-  padding: 4mm;
+  padding: 2.4mm 2.8mm;
   background: #ffffff;
   box-sizing: border-box;
   height: 100%;
-  min-height: 46mm;
+  min-height: 34mm;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 1.8mm;
+  gap: 1mm;
 }
 
 .statement-party-box h3 {
-  margin: 0 0 1mm;
+  margin: 0 0 0.6mm;
   font-size: 10.5pt;
   font-weight: 700;
   color: #1f2937;
@@ -1057,16 +1058,18 @@ input[type="file"] { display: none; }
 
 .statement-party-box div {
   margin: 0;
-  font-size: 10pt;
+  font-size: 9.6pt;
   font-weight: 400;
-  line-height: 1.35;
+  line-height: 1.28;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .settlement-a4-table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 10pt;
+  font-size: 9.6pt;
 }
 
 .settlement-a4-table thead {
@@ -1076,18 +1079,19 @@ input[type="file"] { display: none; }
 .settlement-a4-table th,
 .settlement-a4-table td {
   border: 1px solid #cbd5e1;
-  padding: 3mm 2.4mm;
+  padding: 1.8mm 2.1mm;
   vertical-align: top;
+  line-height: 1.25;
 }
 
 .settlement-a4-table th {
   background: #eaf4ff;
-  font-size: 10.5pt;
+  font-size: 9.8pt;
   font-weight: 700;
 }
 
 .settlement-a4-table tbody tr {
-  min-height: 10mm;
+  min-height: 6.6mm;
 }
 
 .settlement-a4-table .site-cell,
@@ -1111,12 +1115,12 @@ input[type="file"] { display: none; }
 }
 
 .statement-section-block {
-  margin-bottom: 6mm;
+  margin-bottom: 3.2mm;
 }
 
 .statement-section-title {
-  margin: 0 0 2.6mm;
-  font-size: 11pt;
+  margin: 0 0 1.6mm;
+  font-size: 10.5pt;
   font-weight: 800;
   color: #111827;
 }
@@ -1125,23 +1129,27 @@ input[type="file"] { display: none; }
   margin: 0;
   border: 1px dashed #cbd5e1;
   border-radius: 2.5mm;
-  padding: 3.2mm;
+  padding: 2.2mm;
   color: #475569;
-  font-size: 10pt;
+  font-size: 9.4pt;
 }
 
 .statement-subtotal-box {
-  margin-top: 3mm;
+  margin-top: 1.8mm;
   border-top: 1px solid #d1d5db;
-  padding-top: 2.2mm;
-  display: grid;
-  gap: 1.4mm;
+  padding-top: 1.6mm;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.4mm 3.2mm;
+  align-items: center;
 }
 
 .statement-subtotal-box div {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10pt;
+  display: inline-flex;
+  align-items: center;
+  gap: 1mm;
+  font-size: 9.6pt;
+  white-space: nowrap;
 }
 
 .statement-subtotal-title {
@@ -1150,27 +1158,27 @@ input[type="file"] { display: none; }
 }
 
 .statement-total-box {
-  margin-top: 6mm;
+  margin-top: 3.6mm;
   border-top: 1px solid #d1d5db;
-  padding-top: 4mm;
+  padding-top: 2.2mm;
   display: grid;
-  gap: 2mm;
+  gap: 1.2mm;
 }
 
 .statement-total-box div {
   display: flex;
   justify-content: space-between;
-  font-size: 10.5pt;
+  font-size: 9.8pt;
 }
 
 .statement-total-box strong {
-  font-size: 11pt;
+  font-size: 10pt;
 }
 
 .statement-total-title {
   font-weight: 800;
-  font-size: 11pt !important;
-  margin-bottom: 1mm;
+  font-size: 10.5pt !important;
+  margin-bottom: 0.4mm;
 }
 
 @media print {
@@ -1230,7 +1238,7 @@ input[type="file"] { display: none; }
     min-height: 297mm;
     height: auto;
     margin: 0;
-    padding: 15mm;
+    padding: 11mm;
     border: none;
     box-shadow: none;
     transform: none !important;
@@ -1292,7 +1300,8 @@ input[type="file"] { display: none; }
   }
 
   .statement-parties {
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: nowrap;
   }
 }
 
