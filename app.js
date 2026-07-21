@@ -780,6 +780,19 @@ function isDateInRange(dateValue, range) {
   return true;
 }
 
+function getJobCustomerName(job) {
+  return String(
+    job?.customerName
+    || job?.customer
+    || job?.client
+    || job?.orderer
+    || job?.dispatchCompany
+    || job?.vendor
+    || job?.providerName
+    || ""
+  ).trim();
+}
+
 function updateSettlementPeriodUI() {
   document.querySelectorAll("[data-period]").forEach((button) => {
     button.classList.toggle("active", button.dataset.period === selectedSettlementPeriod);
@@ -795,15 +808,12 @@ function buildSettlementReportData() {
   const range = getSettlementRange(selectedSettlementPeriod);
   const customerName = selectedSettlementCustomer === "all"
     ? ""
-    : (state.customers.find((customer) => customer.id === selectedSettlementCustomer)?.name || "");
+    : String(state.customers.find((customer) => customer.id === selectedSettlementCustomer)?.name || "").trim();
 
   const filteredJobs = state.jobs.filter((job) => {
     if (!isDateInRange(job.date, range)) return false;
     if (selectedSettlementCustomer === "all") return true;
-    if (job.jobType === "내 장비 작업") {
-      return (job.customerId && job.customerId === selectedSettlementCustomer) || (job.customerName && job.customerName === customerName);
-    }
-    return false;
+    return getJobCustomerName(job) === customerName;
   });
 
   const filteredExpenses = state.expenses.filter((expense) => isDateInRange(expense.date, range));
@@ -823,7 +833,7 @@ function buildSettlementReportData() {
 
   const customerMap = new Map();
   filteredJobs.forEach((job) => {
-    const name = job.customerName || job.providerName || "미입력";
+    const name = getJobCustomerName(job) || "미입력";
     if (!name) return;
     const key = `${job.jobType}:${name}`;
     if (!customerMap.has(key)) {
@@ -994,26 +1004,7 @@ function buildSettlementStatementHtml(report) {
     .slice()
     .sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
-  const rows = sortedJobs
-    .map((job) => {
-      const supplyAmount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
-      const vatAmount = Math.round(supplyAmount * 0.1);
-      const totalAmount = supplyAmount + vatAmount;
-
-      return `
-        <tr class="statement-row">
-          <td class="date-cell">${escapeHtml(job.date || "")}</td>
-          <td class="site-cell">${escapeHtml(job.siteName || "현장 미입력")}</td>
-          <td class="work-cell">${escapeHtml(job.workContent || "작업내용 없음")}</td>
-          <td class="amount-cell">${escapeHtml(formatCurrency(supplyAmount))}</td>
-          <td class="amount-cell">${escapeHtml(formatCurrency(vatAmount))}</td>
-          <td class="amount-cell">${escapeHtml(formatCurrency(totalAmount))}</td>
-        </tr>
-      `;
-    })
-    .join("");
-
-  if (!rows) {
+  if (!sortedJobs.length) {
     return `
       <div class="settlement-statement-empty">
         <p>선택한 거래처와 기간에 해당하는 작업이 없습니다.</p>
@@ -1021,15 +1012,86 @@ function buildSettlementStatementHtml(report) {
     `;
   }
 
-  const totalSupplyAmount = sortedJobs.reduce((sum, job) => {
-    const amount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
-    return sum + amount;
-  }, 0);
-  const totalVatAmount = sortedJobs.reduce((sum, job) => {
-    const amount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
-    return sum + Math.round(amount * 0.1);
-  }, 0);
-  const totalGrandAmount = totalSupplyAmount + totalVatAmount;
+  const equipmentJobs = sortedJobs.filter((job) => job.jobType === "내 장비 작업");
+  const dispatchJobs = sortedJobs.filter((job) => job.jobType === "배차 작업");
+
+  const getSupplyAmount = (job) => (job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0));
+  const getVatAmount = (supplyAmount) => Math.round(supplyAmount * 0.1);
+
+  const getSectionTotals = (jobs) => jobs.reduce((acc, job) => {
+    const supply = getSupplyAmount(job);
+    const vat = getVatAmount(supply);
+    acc.supply += supply;
+    acc.vat += vat;
+    acc.total += supply + vat;
+    return acc;
+  }, { supply: 0, vat: 0, total: 0 });
+
+  const buildSectionRows = (jobs) => jobs.map((job) => {
+    const supplyAmount = getSupplyAmount(job);
+    const vatAmount = getVatAmount(supplyAmount);
+    const totalAmount = supplyAmount + vatAmount;
+
+    return `
+      <tr class="statement-row">
+        <td class="date-cell">${escapeHtml(job.date || "")}</td>
+        <td class="site-cell">${escapeHtml(job.siteName || "현장 미입력")}</td>
+        <td class="work-cell">${escapeHtml(job.workContent || "작업내용 없음")}</td>
+        <td class="amount-cell">${escapeHtml(formatCurrency(supplyAmount))}</td>
+        <td class="amount-cell">${escapeHtml(formatCurrency(vatAmount))}</td>
+        <td class="amount-cell">${escapeHtml(formatCurrency(totalAmount))}</td>
+      </tr>
+    `;
+  }).join("");
+
+  const buildSectionHtml = (title, jobs, emptyLabel, subtotalLabel) => {
+    const totals = getSectionTotals(jobs);
+    const rows = buildSectionRows(jobs);
+
+    return `
+      <section class="statement-section-block">
+        <h3 class="statement-section-title">■ ${escapeHtml(title)}</h3>
+        ${rows ? `
+          <table class="settlement-a4-table">
+            <colgroup>
+              <col style="width:14%" />
+              <col style="width:21%" />
+              <col style="width:25%" />
+              <col style="width:14%" />
+              <col style="width:12%" />
+              <col style="width:14%" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>현장명</th>
+                <th>작업내용</th>
+                <th>공급가액</th>
+                <th>부가세</th>
+                <th>합계금액</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        ` : `<p class="statement-empty-note">${escapeHtml(emptyLabel)}</p>`}
+
+        <div class="statement-subtotal-box">
+          <div class="statement-subtotal-title">${escapeHtml(subtotalLabel)}</div>
+          <div><span>공급가액</span><strong>${escapeHtml(formatCurrency(totals.supply))}</strong></div>
+          <div><span>부가세</span><strong>${escapeHtml(formatCurrency(totals.vat))}</strong></div>
+          <div><span>합계금액</span><strong>${escapeHtml(formatCurrency(totals.total))}</strong></div>
+        </div>
+      </section>
+    `;
+  };
+
+  const equipmentTotals = getSectionTotals(equipmentJobs);
+  const dispatchTotals = getSectionTotals(dispatchJobs);
+  const grandTotals = {
+    supply: equipmentTotals.supply + dispatchTotals.supply,
+    vat: equipmentTotals.vat + dispatchTotals.vat,
+    total: equipmentTotals.total + dispatchTotals.total
+  };
 
   return `
       <div class="report-scale-wrapper">
@@ -1059,32 +1121,14 @@ function buildSettlementStatementHtml(report) {
             </div>
           </section>
 
-          <table class="settlement-a4-table">
-            <colgroup>
-              <col style="width:14%" />
-              <col style="width:21%" />
-              <col style="width:25%" />
-              <col style="width:14%" />
-              <col style="width:12%" />
-              <col style="width:14%" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>날짜</th>
-                <th>현장명</th>
-                <th>작업내용</th>
-                <th>공급가액</th>
-                <th>부가세</th>
-                <th>합계금액</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
+          ${buildSectionHtml("내 장비 작업", equipmentJobs, "내 장비 작업 없음", "내 장비 소계")}
+          ${buildSectionHtml("배차 작업", dispatchJobs, "배차 작업 없음", "배차 소계")}
 
           <footer class="statement-total-box">
-            <div><span>공급가액 합계</span><strong>${escapeHtml(formatCurrency(totalSupplyAmount))}</strong></div>
-            <div><span>부가세 합계</span><strong>${escapeHtml(formatCurrency(totalVatAmount))}</strong></div>
-            <div><span>총 합계금액</span><strong>${escapeHtml(formatCurrency(totalGrandAmount))}</strong></div>
+            <div class="statement-total-title">■ 총 합계</div>
+            <div><span>공급가액</span><strong>${escapeHtml(formatCurrency(grandTotals.supply))}</strong></div>
+            <div><span>부가세</span><strong>${escapeHtml(formatCurrency(grandTotals.vat))}</strong></div>
+            <div><span>총 합계금액</span><strong>${escapeHtml(formatCurrency(grandTotals.total))}</strong></div>
           </footer>
         </article>
       </div>
