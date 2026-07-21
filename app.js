@@ -201,6 +201,15 @@ function getToday() {
   return formatDateKey(new Date());
 }
 
+function formatBackupTimestamp(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}-${hours}${minutes}`;
+}
+
 function getCurrentMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -2416,7 +2425,7 @@ function exportBackup() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `jeilcrane-pro-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `jeilcrane-backup-${formatBackupTimestamp(new Date())}.json`;
   link.click();
   URL.revokeObjectURL(url);
   showToast("백업 파일이 다운로드되었습니다.");
