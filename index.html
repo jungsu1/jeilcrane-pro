@@ -236,10 +236,13 @@
                 <input id="settlementEndMonth" type="month" />
               </div>
             </div>
+            <div class="settlement-statement-row">
+              <button type="button" id="settlementStatementBtn" class="ghost-btn compact">거래내역서 출력</button>
+            </div>
             <div id="settlementSummary" class="metric-grid"></div>
           </div>
 
-          <div class="card">
+          <div class="card hidden" id="settlementCustomersCard">
             <div class="section-header">
               <h3>거래처별 합계</h3>
               <span class="muted">기간별 집계</span>
@@ -247,13 +250,12 @@
             <div id="settlementCustomers" class="stack-list"></div>
           </div>
 
-          <div class="card">
+          <div class="card hidden" id="settlementJobListCard">
             <div class="section-header">
               <div>
                 <h3>선택 기간 작업 목록</h3>
                 <span class="muted">기간 내 작업 내역</span>
               </div>
-              <button type="button" id="settlementStatementBtn" class="ghost-btn compact hidden">거래내역서 출력</button>
             </div>
             <div id="settlementJobList" class="stack-list"></div>
           </div>

@@ -6,8 +6,7 @@ let calendarViewDate = new Date();
 let selectedSettlementPeriod = "this-month";
 let selectedSettlementCustomer = "all";
 let currentSettlementReport = null;
-let isSettlementOutstandingOpen = false;
-let isSettlementExpenseOpen = false;
+let activeSettlementDetailKey = null;
 let selectedExpensePeriod = "this-month";
 let editingJobId = null;
 let pendingDeleteJobId = null;
@@ -929,6 +928,188 @@ function sortJobsByDateAsc(a, b) {
   return String(a.siteName || "").localeCompare(String(b.siteName || ""));
 }
 
+function buildSettlementNoDataHtml() {
+  return '<p class="muted">선택한 기간에 해당 내역이 없습니다.</p>';
+}
+
+function buildSettlementSimpleGroupHtml(title, count, amount, label) {
+  return `
+    <article class="list-item settlement-accordion-item">
+      <div>
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(`${count}건`)}</p>
+      </div>
+      <div class="value-block">
+        <span class="pill">${escapeHtml(label)}</span>
+        <p>${escapeHtml(formatCurrency(amount))}</p>
+      </div>
+    </article>
+  `;
+}
+
+function buildSettlementGroupedJobSummaryHtml(jobs, label) {
+  if (!jobs.length) return buildSettlementNoDataHtml();
+  const grouped = jobs.reduce((map, job) => {
+    const key = getJobCustomerName(job) || "미입력";
+    if (!map[key]) map[key] = [];
+    map[key].push(job);
+    return map;
+  }, {});
+
+  const names = Object.keys(grouped).sort((a, b) => a.localeCompare(b, "ko"));
+  const rows = names.map((name) => {
+    const list = grouped[name];
+    const amount = list.reduce((sum, job) => sum + getSettlementJobAmount(job), 0);
+    return buildSettlementSimpleGroupHtml(name, list.length, amount, label);
+  }).join("");
+
+  const total = jobs.reduce((sum, job) => sum + getSettlementJobAmount(job), 0);
+  return `
+    <div class="stack-list">${rows}</div>
+    <div class="settlement-accordion-total"><span>전체 ${escapeHtml(label)} 합계</span><strong>${escapeHtml(formatCurrency(total))}</strong></div>
+  `;
+}
+
+function buildSettlementJobCountDetailHtml(report) {
+  const jobs = report.jobs.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  if (!jobs.length) return buildSettlementNoDataHtml();
+
+  const items = jobs.map((job) => {
+    const amountText = formatAmountForList(getSettlementJobAmount(job));
+    const status = getSettlementCollectionStatus(job);
+    return `
+      <article class="list-item settlement-accordion-item">
+        <div>
+          <strong>${escapeHtml(job.date || "-")} · ${escapeHtml(job.siteName || "현장 미입력")}</strong>
+          <p>${escapeHtml(job.workContent || "작업내용 없음")}</p>
+          <p class="muted">${escapeHtml(getJobCustomerName(job) || "미입력")} · ${escapeHtml(job.jobType || "작업구분 미입력")}</p>
+        </div>
+        <div class="value-block">
+          <span class="pill pending">${escapeHtml(status)}</span>
+          <p>${escapeHtml(amountText)}</p>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  return `
+    <div class="stack-list">${items}</div>
+    <div class="settlement-accordion-total"><span>전체 작업건수</span><strong>${jobs.length}건</strong></div>
+  `;
+}
+
+function buildSettlementSalesDetailHtml(report) {
+  const jobs = report.jobs.filter((job) => job.jobType === "내 장비 작업");
+  return buildSettlementGroupedJobSummaryHtml(jobs, "매출");
+}
+
+function buildSettlementCompletedDetailHtml(report) {
+  const jobs = report.jobs.filter((job) => job.jobType === "내 장비 작업" && job.receivableStatus === "수금완료");
+  return buildSettlementGroupedJobSummaryHtml(jobs, "수금완료");
+}
+
+function buildSettlementOutstandingDetailHtml(report) {
+  const jobs = report.jobs.filter((job) => job.jobType === "내 장비 작업" && job.receivableStatus === "미수");
+  return buildSettlementGroupedJobSummaryHtml(jobs, "미수");
+}
+
+function buildSettlementExpenseAccordionDetailHtml(report) {
+  const expenses = (Array.isArray(report.expenses) ? report.expenses : [])
+    .slice()
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  if (!expenses.length) return buildSettlementNoDataHtml();
+
+  const grouped = expenses.reduce((map, expense) => {
+    const key = String(expense.category || "기타").trim() || "기타";
+    if (!map[key]) map[key] = [];
+    map[key].push(expense);
+    return map;
+  }, {});
+
+  const categoryNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, "ko"));
+  const groupsHtml = categoryNames.map((categoryName) => {
+    const items = grouped[categoryName].slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    const listHtml = items.map((expense) => `
+      <article class="list-item settlement-accordion-item">
+        <div>
+          <strong>${escapeHtml(expense.date || "-")} · ${escapeHtml(expense.category || "기타")}</strong>
+          <p>${escapeHtml(expense.memo || "내용 없음")}</p>
+        </div>
+        <div class="value-block"><p>${escapeHtml(formatCurrency(expense.amount))}</p></div>
+      </article>
+    `).join("");
+    const subtotal = items.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+    return `
+      <section class="settlement-accordion-group">
+        <h4>${escapeHtml(categoryName)}</h4>
+        <div class="stack-list">${listHtml}</div>
+        <div class="settlement-accordion-subtotal"><span>항목 합계</span><strong>${escapeHtml(formatCurrency(subtotal))}</strong></div>
+      </section>
+    `;
+  }).join("");
+
+  const total = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  return `${groupsHtml}<div class="settlement-accordion-total"><span>전체 지출 합계</span><strong>${escapeHtml(formatCurrency(total))}</strong></div>`;
+}
+
+function buildSettlementPayableDetailHtml(report) {
+  const jobs = report.jobs
+    .filter((job) => job.jobType === "배차 작업" && String(job.payoutStatus || "").trim() === "미지급");
+  if (!jobs.length) return buildSettlementNoDataHtml();
+
+  const grouped = jobs.reduce((map, job) => {
+    const key = String(job.providerName || getJobCustomerName(job) || "미입력").trim() || "미입력";
+    if (!map[key]) map[key] = [];
+    map[key].push(job);
+    return map;
+  }, {});
+
+  const names = Object.keys(grouped).sort((a, b) => a.localeCompare(b, "ko"));
+  const rows = names.map((name) => {
+    const list = grouped[name];
+    const amount = list.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0);
+    return buildSettlementSimpleGroupHtml(name, list.length, amount, "미지급");
+  }).join("");
+
+  const total = jobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0);
+  return `<div class="stack-list">${rows}</div><div class="settlement-accordion-total"><span>전체 미지급금 합계</span><strong>${escapeHtml(formatCurrency(total))}</strong></div>`;
+}
+
+function buildSettlementProfitDetailHtml(report) {
+  const totalSales = Number(report.summary?.totalSales || 0);
+  const totalExpenses = Number(report.summary?.totalExpenses || 0);
+  const netProfit = totalSales - totalExpenses;
+  return `
+    <div class="settlement-profit-summary">
+      <article class="list-item settlement-accordion-item"><strong>총매출</strong><strong>${escapeHtml(formatCurrency(totalSales))}</strong></article>
+      <article class="list-item settlement-accordion-item"><strong>총지출</strong><strong>${escapeHtml(formatCurrency(totalExpenses))}</strong></article>
+      <article class="list-item settlement-accordion-item"><strong>순이익</strong><strong>${escapeHtml(formatCurrency(netProfit))}</strong></article>
+      <p class="muted">계산식: 총매출 - 총지출</p>
+    </div>
+  `;
+}
+
+function buildSettlementAccordionDetailContent(detailKey, report) {
+  switch (detailKey) {
+    case "job-count":
+      return buildSettlementJobCountDetailHtml(report);
+    case "total-sales":
+      return buildSettlementSalesDetailHtml(report);
+    case "completed-receivable":
+      return buildSettlementCompletedDetailHtml(report);
+    case "outstanding-receivable":
+      return buildSettlementOutstandingDetailHtml(report);
+    case "total-expenses":
+      return buildSettlementExpenseAccordionDetailHtml(report);
+    case "outstanding-payable":
+      return buildSettlementPayableDetailHtml(report);
+    case "net-profit":
+      return buildSettlementProfitDetailHtml(report);
+    default:
+      return buildSettlementNoDataHtml();
+  }
+}
+
 function buildOutstandingReceivableDetailHtml(report) {
   const outstandingJobs = report.jobs
     .filter(isOutstandingReceivableJob)
@@ -1109,6 +1290,9 @@ function buildSettlementReportData() {
     completedReceivable: completedReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
     outstandingReceivable: outstandingReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
     totalExpenses: filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
+    outstandingPayable: filteredJobs
+      .filter((job) => job.jobType === "배차 작업")
+      .reduce((sum, job) => sum + (String(job.payoutStatus || "") === "미지급" ? Number(job.payoutAmount || 0) : 0), 0),
     netProfit: 0
   };
   summary.netProfit = summary.totalSales - summary.totalExpenses;
@@ -1170,142 +1354,40 @@ function renderSettlementView() {
   currentSettlementReport = buildSettlementReportData();
   window.jeilcraneSettlementReport = currentSettlementReport;
 
-  const settlementStatementBtn = document.getElementById("settlementStatementBtn");
-  if (settlementStatementBtn) {
-    const shouldShow = selectedSettlementCustomer !== "all" && currentSettlementReport.jobs.length > 0;
-    settlementStatementBtn.classList.toggle("hidden", !shouldShow);
-  }
-
-  const { summary, customerSummaries, jobs } = currentSettlementReport;
+  const { summary } = currentSettlementReport;
 
   const summaryItems = [
-    { title: "작업건수", value: `${summary.jobCount}건` },
-    { title: "총매출", value: formatCurrency(summary.totalSales) },
-    { title: "수금완료", value: formatCurrency(summary.completedReceivable) },
-    {
-      title: "미수금",
-      value: formatCurrency(summary.outstandingReceivable),
-      action: "toggle-outstanding-details"
-    },
-    {
-      title: "총지출",
-      value: formatCurrency(summary.totalExpenses),
-      action: "toggle-expense-details"
-    },
-    { title: "순이익", value: formatCurrency(summary.netProfit) }
+    { key: "job-count", title: "작업건수", value: `${summary.jobCount}건` },
+    { key: "total-sales", title: "총매출", value: formatCurrency(summary.totalSales) },
+    { key: "completed-receivable", title: "수금완료", value: formatCurrency(summary.completedReceivable) },
+    { key: "outstanding-receivable", title: "미수금", value: formatCurrency(summary.outstandingReceivable) },
+    { key: "total-expenses", title: "총지출", value: formatCurrency(summary.totalExpenses) },
+    { key: "outstanding-payable", title: "미지급금", value: formatCurrency(summary.outstandingPayable || 0) },
+    { key: "net-profit", title: "순이익", value: formatCurrency(summary.netProfit) }
   ];
 
-  const summaryActionState = {
-    "toggle-outstanding-details": isSettlementOutstandingOpen,
-    "toggle-expense-details": isSettlementExpenseOpen
-  };
-
   const summaryCardsHtml = summaryItems.map((item) => {
-    if (item.action) {
-      const isOpen = Boolean(summaryActionState[item.action]);
-      return `
-        <button type="button" class="metric-card settlement-summary-card settlement-summary-btn ${isOpen ? "open" : ""}" data-action="${escapeHtml(item.action)}" aria-expanded="${isOpen ? "true" : "false"}">
-          <h4>${escapeHtml(item.title)}</h4>
-          <strong>${escapeHtml(item.value)}</strong>
-        </button>
-      `;
-    }
+    const isOpen = activeSettlementDetailKey === item.key;
+    const arrow = isOpen ? "▲" : "▼";
+    const detailHtml = isOpen
+      ? `<section class="settlement-accordion-detail">${buildSettlementAccordionDetailContent(item.key, currentSettlementReport)}</section>`
+      : "";
 
     return `
-      <div class="metric-card settlement-summary-card">
+      <button type="button" class="metric-card settlement-summary-card settlement-summary-btn ${isOpen ? "open" : ""}" data-action="toggle-settlement-detail" data-detail-key="${escapeHtml(item.key)}" aria-expanded="${isOpen ? "true" : "false"}">
         <h4>${escapeHtml(item.title)}</h4>
-        <strong>${escapeHtml(item.value)}</strong>
-      </div>
+        <div class="settlement-summary-value-row">
+          <strong>${escapeHtml(item.value)}</strong>
+          <span class="settlement-summary-arrow" aria-hidden="true">${arrow}</span>
+        </div>
+      </button>
+      ${detailHtml}
     `;
   }).join("");
 
-  const outstandingDetailHtml = isSettlementOutstandingOpen
-    ? buildOutstandingReceivableDetailHtml(currentSettlementReport)
-    : "";
-
-  const expenseDetailHtml = isSettlementExpenseOpen
-    ? buildSettlementExpenseDetailHtml(currentSettlementReport)
-    : "";
-
-  document.getElementById("settlementSummary").innerHTML = `${summaryCardsHtml}${outstandingDetailHtml}${expenseDetailHtml}`;
-
-  const customerItems = customerSummaries
-    .map((customer) => `
-      <article class="list-item settlement-card-item">
-        <div>
-          <strong>${escapeHtml(customer.name)}</strong>
-          <p>${customer.count}건 · 기간 합계</p>
-        </div>
-        <div class="value-block">
-          <span class="pill">합계</span>
-          <p>${escapeHtml(formatAmountForList(customer.totalAmount))}</p>
-        </div>
-      </article>
-    `)
-    .join("");
-
-  document.getElementById("settlementCustomers").innerHTML = customerItems || '<p class="muted">선택한 조건의 거래처 합계가 없습니다.</p>';
-
-  const groupedJobs = jobs.reduce((groups, job) => {
-    const key = job.date || "미지정";
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(job);
-    return groups;
-  }, {});
-
-  const sortedDates = Object.keys(groupedJobs).sort((a, b) => a.localeCompare(b));
-
-  const jobItems = sortedDates.map((dateKey) => {
-    const dateJobs = groupedJobs[dateKey].slice().sort((a, b) => (a.siteName || "").localeCompare(b.siteName || ""));
-    const daySales = dateJobs
-      .filter((job) => job.jobType === "내 장비 작업")
-      .reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
-
-    return `
-      <section class="settlement-day-group">
-        <div class="settlement-day-header">
-          <strong>${escapeHtml(dateKey)}</strong>
-          <span class="pill">일매출 ${escapeHtml(formatAmountForList(daySales))}</span>
-        </div>
-        <div class="settlement-day-items">
-          ${dateJobs.map((job) => {
-            const amountValue = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
-            const amountText = formatAmountForList(amountValue);
-            const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
-            const statusClass = statusText === "수금완료" || statusText === "지급완료" ? "completed" : "pending";
-
-            return `
-              <article class="list-item job-list-item settlement-job-card">
-                <div class="job-card-main">
-                  <div class="job-card-header">
-                    <strong class="job-title">${escapeHtml(job.siteName || "현장 미입력")}</strong>
-                  </div>
-                  <div class="job-card-meta">
-                    <span>🚛 ${escapeHtml(job.jobType)}</span>
-                    ${job.workTime ? `<span>🕒 ${escapeHtml(job.workTime)}</span>` : ""}
-                    <span>🏢 ${escapeHtml(job.customerName || job.providerName || "정보 없음")}</span>
-                  </div>
-                  <div class="job-card-content">
-                    <span class="job-card-label">📝</span>
-                    <p>${escapeHtml(job.workContent || "작업내용 없음")}</p>
-                  </div>
-                  <div class="job-card-finance">
-                    <div class="job-amount-row">
-                      <span class="job-card-label">💰</span>
-                      <span class="job-amount">${escapeHtml(amountText)}</span>
-                    </div>
-                    <span class="pill ${statusClass}">${escapeHtml(statusText)}</span>
-                  </div>
-                </div>
-              </article>
-            `;
-          }).join("")}
-        </div>
-      </section>
-    `;
-  }).join("");
-
-  document.getElementById("settlementJobList").innerHTML = jobItems || '<p class="muted">선택한 조건의 작업이 없습니다.</p>';
+  document.getElementById("settlementSummary").innerHTML = summaryCardsHtml;
+  document.getElementById("settlementCustomers").innerHTML = "";
+  document.getElementById("settlementJobList").innerHTML = "";
 }
 
 function buildSettlementStatementHtml(report) {
@@ -2256,14 +2338,9 @@ function handleListActions(event) {
     return;
   }
 
-  if (action === "toggle-outstanding-details") {
-    isSettlementOutstandingOpen = !isSettlementOutstandingOpen;
-    renderSettlementView();
-    return;
-  }
-
-  if (action === "toggle-expense-details") {
-    isSettlementExpenseOpen = !isSettlementExpenseOpen;
+  if (action === "toggle-settlement-detail") {
+    const detailKey = button.dataset.detailKey || "";
+    activeSettlementDetailKey = activeSettlementDetailKey === detailKey ? null : detailKey;
     renderSettlementView();
     return;
   }
