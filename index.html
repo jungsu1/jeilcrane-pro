@@ -306,9 +306,18 @@
             </div>
             <div id="expenseCustomPeriodRow" class="custom-period-row hidden">
               <div class="form-group">
-                <label for="expenseFilterMonth">조회 월</label>
-                <input id="expenseFilterMonth" type="month" />
+                <label for="expenseFilterStartMonth">조회 시작월</label>
+                <input id="expenseFilterStartMonth" type="month" />
               </div>
+              <div class="form-group">
+                <label for="expenseFilterEndMonth">조회 종료월</label>
+                <input id="expenseFilterEndMonth" type="month" />
+              </div>
+            </div>
+            <div class="expense-period-status">
+              <p class="muted">조회 기간</p>
+              <strong id="expenseSelectedPeriodLabel">-</strong>
+              <p id="expensePeriodError" class="muted expense-period-error hidden"></p>
             </div>
             <div id="expenseSummary" class="metric-grid compact-grid"></div>
             <div id="expenseList" class="stack-list"></div>

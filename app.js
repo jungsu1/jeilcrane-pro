@@ -213,6 +213,22 @@ function getLastMonth() {
   return `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function formatMonthLabel(monthValue) {
+  if (!monthValue || !String(monthValue).includes("-")) return "-";
+  const [year, month] = String(monthValue).split("-");
+  return `${year}년 ${Number(month)}월`;
+}
+
+function getMonthDateRange(monthValue) {
+  const [year, month] = String(monthValue || getCurrentMonth()).split("-").map(Number);
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0);
+  return {
+    startKey: formatDateKey(startDate),
+    endKey: formatDateKey(endDate)
+  };
+}
+
 function getInvoiceDateKey() {
   return getToday().replace(/-/g, "");
 }
@@ -826,17 +842,55 @@ function updateExpensePeriodUI() {
   }
 }
 
-function getSelectedExpenseMonth() {
+function getExpenseFilterRange() {
   if (selectedExpensePeriod === "last-month") {
-    return getLastMonth();
+    const month = getLastMonth();
+    const range = getMonthDateRange(month);
+    return {
+      isValid: true,
+      message: "",
+      startMonth: month,
+      endMonth: month,
+      ...range
+    };
   }
 
   if (selectedExpensePeriod === "custom") {
-    const monthInput = document.getElementById("expenseFilterMonth");
-    return monthInput?.value || getCurrentMonth();
+    const startMonthInput = document.getElementById("expenseFilterStartMonth");
+    const endMonthInput = document.getElementById("expenseFilterEndMonth");
+    const startMonth = startMonthInput?.value || getCurrentMonth();
+    const endMonth = endMonthInput?.value || startMonth;
+
+    if (startMonth > endMonth) {
+      return {
+        isValid: false,
+        message: "시작월은 종료월보다 늦을 수 없습니다.",
+        startMonth,
+        endMonth,
+        startKey: "",
+        endKey: ""
+      };
+    }
+
+    return {
+      isValid: true,
+      message: "",
+      startMonth,
+      endMonth,
+      startKey: getMonthDateRange(startMonth).startKey,
+      endKey: getMonthDateRange(endMonth).endKey
+    };
   }
 
-  return getCurrentMonth();
+  const month = getCurrentMonth();
+  const range = getMonthDateRange(month);
+  return {
+    isValid: true,
+    message: "",
+    startMonth: month,
+    endMonth: month,
+    ...range
+  };
 }
 
 function getSettlementJobAmount(job) {
@@ -1730,13 +1784,39 @@ function startExpenseEdit(expense) {
 function renderExpensesView() {
   const expenseSummary = document.getElementById("expenseSummary");
   const expenseList = document.getElementById("expenseList");
+  const periodLabel = document.getElementById("expenseSelectedPeriodLabel");
+  const periodError = document.getElementById("expensePeriodError");
   if (!expenseSummary || !expenseList) return;
 
   updateExpensePeriodUI();
 
-  const targetMonth = getSelectedExpenseMonth();
-  const filteredExpenses = state.expenses
-    .filter((expense) => String(expense.date || "").startsWith(targetMonth));
+  const range = getExpenseFilterRange();
+  const periodText = `${formatMonthLabel(range.startMonth)} ~ ${formatMonthLabel(range.endMonth)}`;
+  if (periodLabel) periodLabel.textContent = periodText;
+
+  if (periodError) {
+    periodError.textContent = range.message || "";
+    periodError.classList.toggle("hidden", !range.message);
+  }
+
+  if (!range.isValid) {
+    expenseSummary.innerHTML = [
+      { title: "총 지출", value: formatCurrency(0) },
+      { title: "등록 건수", value: "0건" }
+    ].map((item) => `
+      <div class="metric-card">
+        <h4>${escapeHtml(item.title)}</h4>
+        <strong>${escapeHtml(item.value)}</strong>
+      </div>
+    `).join("");
+    expenseList.innerHTML = '<p class="muted">시작월은 종료월보다 늦을 수 없습니다.</p>';
+    return;
+  }
+
+  const filteredExpenses = state.expenses.filter((expense) => {
+    const date = String(expense.date || "");
+    return date && date >= range.startKey && date <= range.endKey;
+  });
 
   const sortedExpenses = filteredExpenses
     .slice()
@@ -2364,19 +2444,26 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  const expenseFilterMonthInput = document.getElementById("expenseFilterMonth");
-  if (expenseFilterMonthInput) {
-    if (!expenseFilterMonthInput.value) {
-      expenseFilterMonthInput.value = getCurrentMonth();
-    }
+  const expenseFilterStartMonthInput = document.getElementById("expenseFilterStartMonth");
+  const expenseFilterEndMonthInput = document.getElementById("expenseFilterEndMonth");
+  const currentMonthValue = getCurrentMonth();
 
-    expenseFilterMonthInput.addEventListener("change", () => {
+  if (expenseFilterStartMonthInput && !expenseFilterStartMonthInput.value) {
+    expenseFilterStartMonthInput.value = currentMonthValue;
+  }
+  if (expenseFilterEndMonthInput && !expenseFilterEndMonthInput.value) {
+    expenseFilterEndMonthInput.value = currentMonthValue;
+  }
+
+  [expenseFilterStartMonthInput, expenseFilterEndMonthInput].forEach((input) => {
+    if (!input) return;
+    input.addEventListener("change", () => {
       if (selectedExpensePeriod !== "custom") {
         selectedExpensePeriod = "custom";
       }
       renderExpensesView();
     });
-  }
+  });
 
   const customerSelect = document.getElementById("settlementCustomerSelect");
   if (customerSelect) {
