@@ -727,14 +727,31 @@ function bindCustomerForms() {
       return;
     }
 
+    const existingCustomer = state.customers.find(
+      (customer) => String(customer.name || "").trim().toLowerCase() === name.toLowerCase()
+    );
+
+    if (existingCustomer) {
+      selectedCustomerId = existingCustomer.id;
+      saveState();
+      renderAll();
+      toggleCustomerQuickAdd(false);
+      document.getElementById("quickCustomerName").value = "";
+      const jobCustomerSelect = document.getElementById("jobCustomer");
+      jobCustomerSelect.value = existingCustomer.id;
+      showToast("이미 등록된 거래처입니다. 기존 거래처를 선택했습니다.");
+      return;
+    }
+
     const customer = {
       id: createId("customer"),
       name,
-      representativeName: document.getElementById("quickCustomerRepresentativeName").value.trim(),
-      businessNumber: document.getElementById("quickCustomerBusinessNumber").value.trim(),
-      address: document.getElementById("quickCustomerAddress").value.trim(),
-      phone: document.getElementById("quickCustomerPhone").value.trim(),
-      email: document.getElementById("quickCustomerEmail").value.trim(),
+      representative: "",
+      representativeName: "",
+      businessNumber: "",
+      address: "",
+      phone: "",
+      email: "",
       createdAt: new Date().toISOString()
     };
 
@@ -744,11 +761,6 @@ function bindCustomerForms() {
     renderAll();
     toggleCustomerQuickAdd(false);
     document.getElementById("quickCustomerName").value = "";
-    document.getElementById("quickCustomerRepresentativeName").value = "";
-    document.getElementById("quickCustomerBusinessNumber").value = "";
-    document.getElementById("quickCustomerAddress").value = "";
-    document.getElementById("quickCustomerPhone").value = "";
-    document.getElementById("quickCustomerEmail").value = "";
     const jobCustomerSelect = document.getElementById("jobCustomer");
     jobCustomerSelect.value = customer.id;
     showToast("거래처가 등록되었습니다.");
