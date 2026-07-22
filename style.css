@@ -22,6 +22,10 @@ body {
   min-height: 100vh;
 }
 
+body.no-scroll {
+  overflow: hidden;
+}
+
 button, input, select, textarea {
   font: inherit;
 }
@@ -986,6 +990,71 @@ input[type="file"] { display: none; }
   z-index: 40;
 }
 
+.settings-bottom-sheet-modal {
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.settings-bottom-sheet {
+  width: min(100%, 760px);
+  max-height: min(90dvh, 820px);
+  background: rgba(17, 24, 39, 0.98);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -14px 36px rgba(2, 6, 23, 0.55);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateY(24px);
+  opacity: 0;
+  transition: transform 0.28s ease, opacity 0.28s ease;
+}
+
+.settings-bottom-sheet-modal.open .settings-bottom-sheet {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.settings-bottom-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  background: rgba(15, 23, 42, 0.94);
+}
+
+.settings-bottom-sheet-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.settings-bottom-sheet-close {
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+  border-radius: 999px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.settings-bottom-sheet-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.settings-bottom-sheet-content > .card {
+  margin-bottom: 0;
+}
+
 .confirm-dialog {
   width: min(100%, 420px);
   background: #0b1220;
@@ -1617,6 +1686,20 @@ input[type="file"] { display: none; }
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+@media (min-width: 900px) {
+  .settings-bottom-sheet-modal {
+    align-items: center;
+  }
+
+  .settings-bottom-sheet {
+    width: min(90vw, 820px);
+    max-height: min(86dvh, 860px);
+    border-radius: 20px;
+    border-bottom: 1px solid var(--border);
+    transform: translateY(12px);
+  }
 }
 
 @media (min-width: 640px) {

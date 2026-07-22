@@ -360,7 +360,7 @@
             </div>
           </div>
 
-          <div id="settingsCompanySection" class="card">
+          <div id="settingsCompanySection" class="card hidden">
             <div class="section-header">
               <h3>회사 정보 설정</h3>
               <span class="muted">명세서 상단에 자동 반영</span>
@@ -520,6 +520,16 @@
           <button type="button" class="report-action-btn" id="closeReportBtn">닫기</button>
         </div>
         <div id="settlementStatementContent" class="report-preview-scroll"></div>
+      </div>
+    </div>
+
+    <div id="settingsBottomSheetModal" class="modal settings-bottom-sheet-modal hidden" aria-hidden="true">
+      <div class="settings-bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="settingsBottomSheetTitle">
+        <div class="settings-bottom-sheet-header">
+          <h3 id="settingsBottomSheetTitle">설정</h3>
+          <button type="button" id="settingsBottomSheetCloseBtn" class="settings-bottom-sheet-close" aria-label="닫기">X</button>
+        </div>
+        <div id="settingsBottomSheetContent" class="settings-bottom-sheet-content"></div>
       </div>
     </div>
 

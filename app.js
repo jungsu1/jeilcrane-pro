@@ -13,6 +13,16 @@ let pendingDeleteJobId = null;
 let editingExpenseId = null;
 let pendingDeleteExpenseId = null;
 let editingCustomerId = null;
+let activeSettingsSheetSection = null;
+let settingsSheetHistoryActive = false;
+const settingsSectionPlacement = new Map();
+
+const SETTINGS_SECTION_CONFIG = {
+  customer: { id: "settingsCustomerSection", title: "거래처 관리" },
+  company: { id: "settingsCompanySection", title: "회사정보" },
+  backup: { id: "settingsBackupSection", title: "백업/복원" },
+  app: { id: "settingsAppInfoSection", title: "앱 정보" }
+};
 
 function getDefaultCompanyInfo() {
   return {
@@ -407,19 +417,133 @@ function bindSettingsCards() {
   });
 }
 
-function showSettingsSection(sectionName) {
-  const sections = {
-    customer: document.getElementById("settingsCustomerSection"),
-    company: document.getElementById("settingsCompanySection"),
-    backup: document.getElementById("settingsBackupSection"),
-    app: document.getElementById("settingsAppInfoSection")
-  };
+function recordSettingsSectionPlacement(sectionName, element) {
+  if (!element || settingsSectionPlacement.has(sectionName)) return;
+  settingsSectionPlacement.set(sectionName, {
+    parent: element.parentElement,
+    nextSibling: element.nextElementSibling
+  });
+}
 
-  Object.entries(sections).forEach(([key, element]) => {
-    if (element) {
-      element.classList.toggle("hidden", key !== sectionName);
+function initializeSettingsSectionPlacement() {
+  Object.entries(SETTINGS_SECTION_CONFIG).forEach(([sectionName, config]) => {
+    const element = document.getElementById(config.id);
+    if (!element) return;
+    recordSettingsSectionPlacement(sectionName, element);
+    element.classList.add("hidden");
+  });
+}
+
+function restoreSettingsSection(sectionName) {
+  const config = SETTINGS_SECTION_CONFIG[sectionName];
+  if (!config) return;
+  const element = document.getElementById(config.id);
+  const placement = settingsSectionPlacement.get(sectionName);
+  if (!element || !placement || !placement.parent) return;
+
+  const { parent, nextSibling } = placement;
+  element.classList.add("hidden");
+
+  if (nextSibling && nextSibling.parentNode === parent) {
+    parent.insertBefore(element, nextSibling);
+    return;
+  }
+
+  parent.appendChild(element);
+}
+
+function finalizeSettingsSheetClose() {
+  const modal = document.getElementById("settingsBottomSheetModal");
+  if (!modal) return;
+
+  if (activeSettingsSheetSection) {
+    restoreSettingsSection(activeSettingsSheetSection);
+  }
+
+  activeSettingsSheetSection = null;
+  modal.classList.remove("open");
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("no-scroll");
+}
+
+function closeSettingsBottomSheet(options = {}) {
+  const { fromPopState = false } = options;
+  const modal = document.getElementById("settingsBottomSheetModal");
+  if (!modal || modal.classList.contains("hidden")) return;
+
+  if (!fromPopState && settingsSheetHistoryActive) {
+    settingsSheetHistoryActive = false;
+    window.history.back();
+    return;
+  }
+
+  settingsSheetHistoryActive = false;
+  finalizeSettingsSheetClose();
+}
+
+function openSettingsBottomSheet(sectionName) {
+  const config = SETTINGS_SECTION_CONFIG[sectionName];
+  if (!config) return;
+
+  const modal = document.getElementById("settingsBottomSheetModal");
+  const title = document.getElementById("settingsBottomSheetTitle");
+  const content = document.getElementById("settingsBottomSheetContent");
+  const sectionElement = document.getElementById(config.id);
+
+  if (!modal || !title || !content || !sectionElement) return;
+
+  if (!settingsSectionPlacement.has(sectionName)) {
+    recordSettingsSectionPlacement(sectionName, sectionElement);
+  }
+
+  if (activeSettingsSheetSection && activeSettingsSheetSection !== sectionName) {
+    restoreSettingsSection(activeSettingsSheetSection);
+  }
+
+  sectionElement.classList.remove("hidden");
+  content.innerHTML = "";
+  content.appendChild(sectionElement);
+  activeSettingsSheetSection = sectionName;
+  title.textContent = config.title;
+
+  if (modal.classList.contains("hidden")) {
+    modal.classList.remove("hidden");
+    requestAnimationFrame(() => modal.classList.add("open"));
+    document.body.classList.add("no-scroll");
+    modal.setAttribute("aria-hidden", "false");
+
+    if (!settingsSheetHistoryActive) {
+      window.history.pushState({ ...(window.history.state || {}), settingsBottomSheetOpen: true }, "");
+      settingsSheetHistoryActive = true;
+    }
+    return;
+  }
+
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function bindSettingsBottomSheet() {
+  const modal = document.getElementById("settingsBottomSheetModal");
+  const closeButton = document.getElementById("settingsBottomSheetCloseBtn");
+  if (!modal || !closeButton) return;
+
+  closeButton.addEventListener("click", () => closeSettingsBottomSheet());
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) {
+      closeSettingsBottomSheet();
     }
   });
+
+  window.addEventListener("popstate", () => {
+    if (!activeSettingsSheetSection) return;
+    closeSettingsBottomSheet({ fromPopState: true });
+  });
+}
+
+function showSettingsSection(sectionName) {
+  openSettingsBottomSheet(sectionName);
 }
 
 function toggleJobTypeFields() {
@@ -2649,9 +2773,11 @@ function registerServiceWorker() {
 const state = loadState();
 
 document.addEventListener("DOMContentLoaded", () => {
+  initializeSettingsSectionPlacement();
   bindNavigation();
   bindForm();
   bindSettingsCards();
+  bindSettingsBottomSheet();
   bindSettingsForm();
   bindCustomerForms();
   bindExpenseForm();
@@ -2757,7 +2883,6 @@ document.addEventListener("DOMContentLoaded", () => {
   toggleCustomerQuickAdd(false);
   setJobFormMode(false);
   populateSettingsForm();
-  showSettingsSection("company");
   renderAll();
   setView("dashboard");
   registerServiceWorker();
