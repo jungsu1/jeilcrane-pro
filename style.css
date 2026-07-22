@@ -857,8 +857,18 @@ input[type="file"] { display: none; }
     align-items: stretch;
   }
 
+  .customer-item-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 8px;
+    width: 100%;
+  }
+
   .customer-item-actions .tiny-btn {
     flex: 1 1 0;
+    min-height: 40px;
+    width: 100%;
   }
 }
 
@@ -929,13 +939,18 @@ input[type="file"] { display: none; }
 }
 
 .customer-item-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
   justify-content: flex-end;
+  width: 100%;
 }
 
 .customer-item-actions .tiny-btn {
-  min-height: 38px;
+  min-height: 40px;
   padding: 8px 12px;
   font-size: 0.8rem;
+  flex: 1 1 0;
 }
 
 .bottom-nav {

@@ -624,7 +624,8 @@ function resetCustomerFormToCreateMode() {
 function startCustomerEdit(customer) {
   if (!customer) return;
   editingCustomerId = customer.id;
-  setView("customers");
+  setView("settings");
+  showSettingsSection("customer");
   document.getElementById("customerName").value = customer.name || "";
   document.getElementById("customerManager").value = customer.manager || "";
   document.getElementById("customerMemo").value = customer.memo || "";
@@ -766,6 +767,13 @@ function getCustomerJobs(customer) {
 function renderCustomersView() {
   const list = document.getElementById("customerList");
   const detail = document.getElementById("customerDetail");
+  if (!list || !detail) return;
+
+  list.classList.remove("hidden");
+  list.style.display = "flex";
+  list.style.visibility = "visible";
+  list.style.height = "auto";
+  list.style.overflow = "visible";
 
   if (!state.customers.length) {
     selectedCustomerId = null;
@@ -782,6 +790,7 @@ function renderCustomersView() {
   const selectedCustomer = state.customers.find((customer) => customer.id === selectedCustomerId);
   list.innerHTML = state.customers.map((customer) => {
     const jobs = getCustomerJobs(customer);
+    const totalJobCount = jobs.length;
     const outstanding = jobs
       .filter((job) => job.jobType === "내 장비 작업")
       .reduce((sum, job) => sum + (job.receivableStatus === "미수" ? Number(job.salesAmount || 0) : 0), 0);
@@ -789,15 +798,11 @@ function renderCustomersView() {
       <article class="list-item customer-list-item">
         <div class="customer-list-main">
           <strong>${escapeHtml(customer.name)}</strong>
-          <p>${escapeHtml(customer.manager || "담당자 미등록")} · ${escapeHtml(customer.memo || "메모 없음")}</p>
+          <p>${escapeHtml(customer.manager || "담당자 미등록")}</p>
+          <p>${escapeHtml(`${totalJobCount}건 · ${formatCurrency(outstanding)}`)}</p>
         </div>
         <div class="customer-item-side">
-          <div class="value-block">
-            <span class="pill">${jobs.length}건</span>
-            <p>${escapeHtml(formatCurrency(outstanding))}</p>
-          </div>
-          <div class="job-card-actions customer-item-actions">
-            <button class="tiny-btn" data-action="show-customer" data-id="${escapeHtml(customer.id)}">상세</button>
+          <div class="customer-item-actions">
             <button class="tiny-btn" data-action="edit-customer" data-id="${escapeHtml(customer.id)}">수정</button>
             <button class="tiny-btn danger" data-action="delete-customer" data-id="${escapeHtml(customer.id)}">삭제</button>
           </div>
