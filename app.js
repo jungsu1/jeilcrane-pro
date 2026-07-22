@@ -2782,7 +2782,10 @@ document.addEventListener("DOMContentLoaded", () => {
   bindCustomerForms();
   bindExpenseForm();
   document.addEventListener("click", handleListActions);
-  document.getElementById("backupBtn").addEventListener("click", exportBackup);
+  const backupBtn = document.getElementById("backupBtn");
+  if (backupBtn) {
+    backupBtn.addEventListener("click", exportBackup);
+  }
   document.getElementById("exportBtn").addEventListener("click", exportBackup);
   document.getElementById("importFile").addEventListener("change", importBackup);
   document.getElementById("closeInvoiceBtn").addEventListener("click", closeInvoice);

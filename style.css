@@ -67,10 +67,18 @@ button, input, select, textarea {
 }
 
 .hero-card {
+  position: relative;
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+  padding-right: 148px;
+  min-height: 120px;
+}
+
+.hero-card > div:first-child {
+  width: 100%;
+  min-width: 0;
 }
 
 .hero-card h2 { margin: 6px 0; font-size: 1.2rem; }
@@ -84,6 +92,10 @@ button, input, select, textarea {
   font-size: 0.78rem;
   font-weight: 700;
   white-space: nowrap;
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
 }
 
 .metric-grid {
@@ -1608,6 +1620,25 @@ input[type="file"] { display: none; }
 }
 
 @media (max-width: 640px) {
+  .hero-card {
+    gap: 10px;
+    height: auto;
+    min-height: 116px;
+    padding-right: 124px;
+  }
+
+  .hero-card h2,
+  .hero-card p {
+    word-break: keep-all;
+    overflow-wrap: normal;
+  }
+
+  .hero-badge {
+    right: 14px;
+    font-size: 0.72rem;
+    padding: 7px 9px;
+  }
+
   .invoice-content {
     padding: 20px 18px;
   }
