@@ -1337,16 +1337,24 @@ function buildSettlementReportData() {
   const customerName = selectedSettlementCustomer === "all"
     ? ""
     : String(selectedCustomer?.name || "").trim();
+  const isAllCustomers = selectedSettlementCustomer === "all";
+
+  const isSelectedCustomerJob = (job) => {
+    if (isAllCustomers) return true;
+    if (job.customerId) return job.customerId === selectedSettlementCustomer;
+    return getJobCustomerName(job) === customerName;
+  };
 
   const filteredJobs = state.jobs.filter((job) => {
     if (!isDateInRange(job.date, range)) return false;
-    if (selectedSettlementCustomer === "all") return true;
-    if (job.customerId && job.customerId === selectedSettlementCustomer) return true;
-    return getJobCustomerName(job) === customerName;
+    return isSelectedCustomerJob(job);
   });
 
   const filteredExpenses = state.expenses.filter((expense) => isDateInRange(expense.date, range));
   const equipmentJobs = filteredJobs.filter((job) => job.jobType === "내 장비 작업");
+  const unpaidDispatchJobs = filteredJobs.filter(
+    (job) => job.jobType === "배차 작업" && String(job.payoutStatus || "") === "미지급"
+  );
   const completedReceivables = equipmentJobs.filter((job) => job.receivableStatus === "수금완료");
   const outstandingReceivables = equipmentJobs.filter((job) => job.receivableStatus === "미수");
 
@@ -1356,9 +1364,7 @@ function buildSettlementReportData() {
     completedReceivable: completedReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
     outstandingReceivable: outstandingReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
     totalExpenses: filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
-    outstandingPayable: filteredJobs
-      .filter((job) => job.jobType === "배차 작업")
-      .reduce((sum, job) => sum + (String(job.payoutStatus || "") === "미지급" ? Number(job.payoutAmount || 0) : 0), 0),
+    outstandingPayable: unpaidDispatchJobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0),
     netProfit: 0
   };
   summary.netProfit = summary.totalSales - summary.totalExpenses;
@@ -1421,16 +1427,26 @@ function renderSettlementView() {
   window.jeilcraneSettlementReport = currentSettlementReport;
 
   const { summary } = currentSettlementReport;
+  const isAllCustomersSelected = selectedSettlementCustomer === "all";
 
-  const summaryItems = [
+  const commonSummaryItems = [
     { key: "job-count", title: "작업건수", value: `${summary.jobCount}건` },
     { key: "total-sales", title: "총매출", value: formatCurrency(summary.totalSales) },
     { key: "completed-receivable", title: "수금완료", value: formatCurrency(summary.completedReceivable) },
     { key: "outstanding-receivable", title: "미수금", value: formatCurrency(summary.outstandingReceivable) },
+    { key: "outstanding-payable", title: "미지급금", value: formatCurrency(summary.outstandingPayable || 0) }
+  ];
+  const allCustomerOnlySummaryItems = [
     { key: "total-expenses", title: "총지출", value: formatCurrency(summary.totalExpenses) },
-    { key: "outstanding-payable", title: "미지급금", value: formatCurrency(summary.outstandingPayable || 0) },
     { key: "net-profit", title: "순이익", value: formatCurrency(summary.netProfit) }
   ];
+  const summaryItems = isAllCustomersSelected
+    ? [...commonSummaryItems.slice(0, 4), ...allCustomerOnlySummaryItems, commonSummaryItems[4]]
+    : commonSummaryItems;
+
+  if (!summaryItems.some((item) => item.key === activeSettlementDetailKey)) {
+    activeSettlementDetailKey = null;
+  }
 
   const summaryCardsHtml = summaryItems.map((item) => {
     const isOpen = activeSettlementDetailKey === item.key;
