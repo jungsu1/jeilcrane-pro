@@ -766,8 +766,7 @@ function getCustomerJobs(customer) {
 
 function renderCustomersView() {
   const list = document.getElementById("customerList");
-  const detail = document.getElementById("customerDetail");
-  if (!list || !detail) return;
+  if (!list) return;
 
   list.classList.remove("hidden");
   list.style.display = "flex";
@@ -779,27 +778,19 @@ function renderCustomersView() {
     selectedCustomerId = null;
     resetCustomerFormToCreateMode();
     list.innerHTML = '<p class="muted">등록된 거래처가 없습니다.</p>';
-    detail.innerHTML = '<p class="muted">거래처를 먼저 등록해 주세요.</p>';
     return;
   }
 
-  if (!selectedCustomerId || !state.customers.some((customer) => customer.id === selectedCustomerId)) {
-    selectedCustomerId = state.customers[0].id;
-  }
-
-  const selectedCustomer = state.customers.find((customer) => customer.id === selectedCustomerId);
   list.innerHTML = state.customers.map((customer) => {
-    const jobs = getCustomerJobs(customer);
-    const totalJobCount = jobs.length;
-    const outstanding = jobs
-      .filter((job) => job.jobType === "내 장비 작업")
-      .reduce((sum, job) => sum + (job.receivableStatus === "미수" ? Number(job.salesAmount || 0) : 0), 0);
+    const managerText = customer.manager ? escapeHtml(customer.manager) : "담당자 미등록";
+    const memoText = customer.memo ? escapeHtml(customer.memo) : "메모 없음";
+
     return `
       <article class="list-item customer-list-item">
         <div class="customer-list-main">
           <strong>${escapeHtml(customer.name)}</strong>
-          <p>${escapeHtml(customer.manager || "담당자 미등록")}</p>
-          <p>${escapeHtml(`${totalJobCount}건 · ${formatCurrency(outstanding)}`)}</p>
+          <p>${managerText}</p>
+          <p>${memoText}</p>
         </div>
         <div class="customer-item-side">
           <div class="customer-item-actions">
@@ -810,46 +801,6 @@ function renderCustomersView() {
       </article>
     `;
   }).join("");
-
-  const customerJobs = getCustomerJobs(selectedCustomer);
-  const recentJobs = customerJobs.slice(0, 5);
-  const totalSales = customerJobs
-    .filter((job) => job.jobType === "내 장비 작업")
-    .reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
-  const outstanding = customerJobs
-    .filter((job) => job.jobType === "내 장비 작업")
-    .reduce((sum, job) => sum + (job.receivableStatus === "미수" ? Number(job.salesAmount || 0) : 0), 0);
-
-  detail.innerHTML = `
-    <div class="customer-summary">
-      <div class="metric-card">
-        <h4>총 작업건수</h4>
-        <strong>${customerJobs.length}건</strong>
-      </div>
-      <div class="metric-card">
-        <h4>총 매출</h4>
-        <strong>${formatCurrency(totalSales)}</strong>
-      </div>
-      <div class="metric-card">
-        <h4>미수금</h4>
-        <strong>${formatCurrency(outstanding)}</strong>
-      </div>
-    </div>
-    <div class="stack-list">
-      ${recentJobs.length ? recentJobs.map((job) => `
-        <article class="list-item">
-          <div>
-            <strong>${escapeHtml(job.siteName)}</strong>
-            <p>${escapeHtml(job.date)} · ${escapeHtml(job.workContent || "작업내용 없음")}</p>
-          </div>
-          <div class="value-block">
-            <span class="pill">${escapeHtml(job.jobType)}</span>
-            <p>${escapeHtml(formatCurrency(job.salesAmount || 0))}</p>
-          </div>
-        </article>
-      `).join("") : '<p class="muted">최근 작업 내역이 없습니다.</p>'}
-    </div>
-  `;
 }
 
 function getSettlementRange(periodName) {
@@ -2449,12 +2400,6 @@ function handleListActions(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   const { action, id, date } = button.dataset;
-
-  if (action === "show-customer") {
-    selectedCustomerId = id;
-    renderCustomersView();
-    return;
-  }
 
   if (action === "edit-customer") {
     const customer = state.customers.find((item) => item.id === id);

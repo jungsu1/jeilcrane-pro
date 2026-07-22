@@ -924,6 +924,7 @@ input[type="file"] { display: none; }
 
 .customer-list-item {
   align-items: center;
+  padding: 8px 0;
 }
 
 .customer-list-main {
@@ -951,6 +952,10 @@ input[type="file"] { display: none; }
   padding: 8px 12px;
   font-size: 0.8rem;
   flex: 1 1 0;
+}
+
+.customer-list-main p {
+  margin: 0;
 }
 
 .bottom-nav {
