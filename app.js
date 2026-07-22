@@ -660,6 +660,30 @@ function deleteCustomer(customerId) {
   showToast("거래처가 삭제되었습니다.");
 }
 
+function syncJobsForCustomerRename({ customerId, oldName, newName }) {
+  const previousName = String(oldName || "").trim();
+  const nextName = String(newName || "").trim();
+  if (!customerId || !nextName) return;
+
+  state.jobs = state.jobs.map((job) => {
+    const jobCustomerId = String(job.customerId || "").trim();
+    const jobCustomerName = String(job.customerName || "").trim();
+
+    const matchesById = jobCustomerId && jobCustomerId === customerId;
+    const matchesLegacyName = !jobCustomerId && previousName && jobCustomerName === previousName;
+
+    if (!matchesById && !matchesLegacyName) {
+      return job;
+    }
+
+    return {
+      ...job,
+      customerId,
+      customerName: nextName
+    };
+  });
+}
+
 function bindCustomerForms() {
   const customerForm = document.getElementById("customerForm");
   const cancelEditButton = document.getElementById("customerEditCancelBtn");
@@ -728,12 +752,21 @@ function bindCustomerForms() {
         return;
       }
 
-      state.customers[targetIndex] = {
+      const previousCustomerName = String(existingCustomer.name || "").trim();
+      const updatedCustomer = {
         ...existingCustomer,
         name,
         manager: document.getElementById("customerManager").value.trim(),
         memo: document.getElementById("customerMemo").value.trim()
       };
+
+      state.customers[targetIndex] = updatedCustomer;
+      syncJobsForCustomerRename({
+        customerId: existingCustomer.id,
+        oldName: previousCustomerName,
+        newName: updatedCustomer.name
+      });
+
       selectedCustomerId = existingCustomer.id;
     } else {
       const customer = {
