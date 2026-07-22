@@ -12,6 +12,7 @@ let editingJobId = null;
 let pendingDeleteJobId = null;
 let editingExpenseId = null;
 let pendingDeleteExpenseId = null;
+let editingCustomerId = null;
 
 function getDefaultCompanyInfo() {
   return {
@@ -605,7 +606,62 @@ function populateSettingsForm() {
   document.getElementById("companyEmail").value = companyInfo.email || "";
 }
 
+function setCustomerFormMode(isEditMode) {
+  const submitButton = document.getElementById("customerSubmitBtn");
+  const cancelButton = document.getElementById("customerEditCancelBtn");
+
+  if (submitButton) submitButton.textContent = isEditMode ? "거래처 수정 저장" : "거래처 등록";
+  if (cancelButton) cancelButton.classList.toggle("hidden", !isEditMode);
+}
+
+function resetCustomerFormToCreateMode() {
+  const form = document.getElementById("customerForm");
+  editingCustomerId = null;
+  if (form) form.reset();
+  setCustomerFormMode(false);
+}
+
+function startCustomerEdit(customer) {
+  if (!customer) return;
+  editingCustomerId = customer.id;
+  setView("customers");
+  document.getElementById("customerName").value = customer.name || "";
+  document.getElementById("customerManager").value = customer.manager || "";
+  document.getElementById("customerMemo").value = customer.memo || "";
+  setCustomerFormMode(true);
+  document.getElementById("customerName").focus();
+}
+
+function deleteCustomer(customerId) {
+  const customer = state.customers.find((item) => item.id === customerId);
+  if (!customer) {
+    showToast("삭제할 거래처를 찾지 못했습니다.");
+    return;
+  }
+
+  const confirmed = window.confirm("이 거래처를 삭제하시겠습니까?\n기존 작업 내역과 정산 기록은 삭제되지 않습니다.");
+  if (!confirmed) return;
+
+  state.customers = state.customers.filter((item) => item.id !== customerId);
+
+  if (selectedCustomerId === customerId) {
+    selectedCustomerId = state.customers[0]?.id || null;
+  }
+  if (selectedSettlementCustomer === customerId) {
+    selectedSettlementCustomer = "all";
+  }
+  if (editingCustomerId === customerId) {
+    resetCustomerFormToCreateMode();
+  }
+
+  saveState();
+  renderAll();
+  showToast("거래처가 삭제되었습니다.");
+}
+
 function bindCustomerForms() {
+  const customerForm = document.getElementById("customerForm");
+  const cancelEditButton = document.getElementById("customerEditCancelBtn");
   document.getElementById("newCustomerBtn").addEventListener("click", () => toggleCustomerQuickAdd(true));
   document.getElementById("cancelQuickCustomerBtn").addEventListener("click", () => toggleCustomerQuickAdd(false));
   document.getElementById("saveQuickCustomerBtn").addEventListener("click", () => {
@@ -637,7 +693,14 @@ function bindCustomerForms() {
     showToast("거래처가 등록되었습니다.");
   });
 
-  document.getElementById("customerForm").addEventListener("submit", (event) => {
+  if (cancelEditButton) {
+    cancelEditButton.addEventListener("click", () => {
+      resetCustomerFormToCreateMode();
+      showToast("거래처 수정을 취소했습니다.");
+    });
+  }
+
+  customerForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const nameInput = document.getElementById("customerName");
     const name = nameInput.value.trim();
@@ -646,20 +709,48 @@ function bindCustomerForms() {
       return;
     }
 
-    const customer = {
-      id: createId("customer"),
-      name,
-      manager: document.getElementById("customerManager").value.trim(),
-      memo: document.getElementById("customerMemo").value.trim(),
-      createdAt: new Date().toISOString()
-    };
+    const existingCustomer = editingCustomerId
+      ? state.customers.find((customer) => customer.id === editingCustomerId)
+      : null;
 
-    state.customers.unshift(customer);
-    selectedCustomerId = customer.id;
+    if (editingCustomerId && !existingCustomer) {
+      showToast("수정할 거래처를 찾지 못했습니다.");
+      resetCustomerFormToCreateMode();
+      return;
+    }
+
+    if (existingCustomer) {
+      const targetIndex = state.customers.findIndex((customer) => customer.id === existingCustomer.id);
+      if (targetIndex === -1) {
+        showToast("수정할 거래처를 찾지 못했습니다.");
+        resetCustomerFormToCreateMode();
+        return;
+      }
+
+      state.customers[targetIndex] = {
+        ...existingCustomer,
+        name,
+        manager: document.getElementById("customerManager").value.trim(),
+        memo: document.getElementById("customerMemo").value.trim()
+      };
+      selectedCustomerId = existingCustomer.id;
+    } else {
+      const customer = {
+        id: createId("customer"),
+        name,
+        manager: document.getElementById("customerManager").value.trim(),
+        memo: document.getElementById("customerMemo").value.trim(),
+        createdAt: new Date().toISOString()
+      };
+
+      state.customers.unshift(customer);
+      selectedCustomerId = customer.id;
+    }
+
     saveState();
     renderAll();
-    document.getElementById("customerForm").reset();
-    showToast("거래처가 등록되었습니다.");
+    resetCustomerFormToCreateMode();
+    showToast(existingCustomer ? "거래처가 수정되었습니다." : "거래처가 등록되었습니다.");
   });
 }
 
@@ -677,6 +768,8 @@ function renderCustomersView() {
   const detail = document.getElementById("customerDetail");
 
   if (!state.customers.length) {
+    selectedCustomerId = null;
+    resetCustomerFormToCreateMode();
     list.innerHTML = '<p class="muted">등록된 거래처가 없습니다.</p>';
     detail.innerHTML = '<p class="muted">거래처를 먼저 등록해 주세요.</p>';
     return;
@@ -693,15 +786,21 @@ function renderCustomersView() {
       .filter((job) => job.jobType === "내 장비 작업")
       .reduce((sum, job) => sum + (job.receivableStatus === "미수" ? Number(job.salesAmount || 0) : 0), 0);
     return `
-      <article class="list-item">
-        <div>
+      <article class="list-item customer-list-item">
+        <div class="customer-list-main">
           <strong>${escapeHtml(customer.name)}</strong>
           <p>${escapeHtml(customer.manager || "담당자 미등록")} · ${escapeHtml(customer.memo || "메모 없음")}</p>
         </div>
-        <div class="value-block">
-          <span class="pill">${jobs.length}건</span>
-          <p>${escapeHtml(formatCurrency(outstanding))}</p>
-          <button class="tiny-btn" data-action="show-customer" data-id="${escapeHtml(customer.id)}">상세</button>
+        <div class="customer-item-side">
+          <div class="value-block">
+            <span class="pill">${jobs.length}건</span>
+            <p>${escapeHtml(formatCurrency(outstanding))}</p>
+          </div>
+          <div class="job-card-actions customer-item-actions">
+            <button class="tiny-btn" data-action="show-customer" data-id="${escapeHtml(customer.id)}">상세</button>
+            <button class="tiny-btn" data-action="edit-customer" data-id="${escapeHtml(customer.id)}">수정</button>
+            <button class="tiny-btn danger" data-action="delete-customer" data-id="${escapeHtml(customer.id)}">삭제</button>
+          </div>
         </div>
       </article>
     `;
@@ -1278,13 +1377,15 @@ function buildSettlementExpenseDetailHtml(report) {
 
 function buildSettlementReportData() {
   const range = getSettlementRange(selectedSettlementPeriod);
+  const selectedCustomer = state.customers.find((customer) => customer.id === selectedSettlementCustomer);
   const customerName = selectedSettlementCustomer === "all"
     ? ""
-    : String(state.customers.find((customer) => customer.id === selectedSettlementCustomer)?.name || "").trim();
+    : String(selectedCustomer?.name || "").trim();
 
   const filteredJobs = state.jobs.filter((job) => {
     if (!isDateInRange(job.date, range)) return false;
     if (selectedSettlementCustomer === "all") return true;
+    if (job.customerId && job.customerId === selectedSettlementCustomer) return true;
     return getJobCustomerName(job) === customerName;
   });
 
@@ -1480,36 +1581,36 @@ function buildSettlementStatementHtml(report) {
     `;
   }).join("");
 
-  const buildSectionHtml = (title, jobs, emptyLabel, subtotalLabel) => {
+  const buildSectionHtml = (title, jobs, subtotalLabel) => {
+    if (!jobs.length) return "";
+
     const totals = getSectionTotals(jobs);
     const rows = buildSectionRows(jobs);
 
     return `
       <section class="statement-section-block">
         <h3 class="statement-section-title">■ ${escapeHtml(title)}</h3>
-        ${rows ? `
-          <table class="settlement-a4-table">
-            <colgroup>
-              <col style="width:14%" />
-              <col style="width:21%" />
-              <col style="width:25%" />
-              <col style="width:14%" />
-              <col style="width:12%" />
-              <col style="width:14%" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>날짜</th>
-                <th>현장명</th>
-                <th>작업내용</th>
-                <th>공급가액</th>
-                <th>부가세</th>
-                <th>합계금액</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        ` : `<p class="statement-empty-note">${escapeHtml(emptyLabel)}</p>`}
+        <table class="settlement-a4-table">
+          <colgroup>
+            <col style="width:14%" />
+            <col style="width:21%" />
+            <col style="width:25%" />
+            <col style="width:14%" />
+            <col style="width:12%" />
+            <col style="width:14%" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>날짜</th>
+              <th>현장명</th>
+              <th>작업내용</th>
+              <th>공급가액</th>
+              <th>부가세</th>
+              <th>합계금액</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
 
         <div class="statement-subtotal-box">
           <div class="statement-subtotal-title">${escapeHtml(subtotalLabel)}</div>
@@ -1523,6 +1624,10 @@ function buildSettlementStatementHtml(report) {
 
   const equipmentTotals = getSectionTotals(equipmentJobs);
   const dispatchTotals = getSectionTotals(dispatchJobs);
+  const sectionBlocksHtml = [
+    buildSectionHtml("내 장비 작업", equipmentJobs, "내 장비 소계"),
+    buildSectionHtml("배차 작업", dispatchJobs, "배차 소계")
+  ].join("");
   const settlementNetSupply = equipmentTotals.supply - dispatchTotals.supply;
   const settlementVat = Math.round(settlementNetSupply * 0.1);
   const settlementFinalTotal = settlementNetSupply + settlementVat;
@@ -1557,8 +1662,7 @@ function buildSettlementStatementHtml(report) {
             </div>
           </section>
 
-          ${buildSectionHtml("내 장비 작업", equipmentJobs, "내 장비 작업 없음", "내 장비 소계")}
-          ${buildSectionHtml("배차 작업", dispatchJobs, "배차 작업 없음", "배차 소계")}
+          ${sectionBlocksHtml}
 
           <footer class="statement-total-box">
             <div class="statement-total-title">■ 정산 합계</div>
@@ -2344,6 +2448,21 @@ function handleListActions(event) {
   if (action === "show-customer") {
     selectedCustomerId = id;
     renderCustomersView();
+    return;
+  }
+
+  if (action === "edit-customer") {
+    const customer = state.customers.find((item) => item.id === id);
+    if (!customer) {
+      showToast("수정할 거래처를 찾지 못했습니다.");
+      return;
+    }
+    startCustomerEdit(customer);
+    return;
+  }
+
+  if (action === "delete-customer") {
+    deleteCustomer(id);
     return;
   }
 

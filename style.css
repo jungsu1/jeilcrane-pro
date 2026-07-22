@@ -845,6 +845,21 @@ input[type="file"] { display: none; }
   .expense-list-item .tiny-btn {
     width: 100%;
   }
+
+  .customer-list-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .customer-item-side {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .customer-item-actions .tiny-btn {
+    flex: 1 1 0;
+  }
 }
 
 @media (min-width: 700px) {
@@ -869,6 +884,11 @@ input[type="file"] { display: none; }
   flex: 1;
 }
 
+#customerFormActionRow .primary-btn,
+#customerFormActionRow .ghost-btn {
+  flex: 1;
+}
+
 #expenseFormActionRow .primary-btn,
 #expenseFormActionRow .ghost-btn {
   flex: 1;
@@ -890,6 +910,32 @@ input[type="file"] { display: none; }
 
 .customer-detail .metric-card {
   margin-bottom: 0;
+}
+
+.customer-list-item {
+  align-items: center;
+}
+
+.customer-list-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.customer-item-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.customer-item-actions {
+  justify-content: flex-end;
+}
+
+.customer-item-actions .tiny-btn {
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 0.8rem;
 }
 
 .bottom-nav {
