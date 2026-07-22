@@ -1,6 +1,6 @@
 ﻿{
-  "name": "JEILCRANE PRO",
-  "short_name": "JEILCRANE",
+  "name": "JEIL PRO",
+  "short_name": "JEIL PRO",
   "description": "모바일 크레인 사업 운영용 오프라인 PWA",
   "start_url": "./index.html",
   "scope": "./",

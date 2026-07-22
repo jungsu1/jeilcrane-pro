@@ -26,7 +26,7 @@ const SETTINGS_SECTION_CONFIG = {
 
 function getDefaultCompanyInfo() {
   return {
-    companyName: "제일크레인",
+    companyName: "제일장비프로",
     representativeName: "",
     businessNumber: "",
     address: "",
@@ -2376,7 +2376,7 @@ function buildInvoiceHtml(job) {
       </div>
       <div class="invoice-company">
         <div class="invoice-company-info">
-          <div class="invoice-company-name">${escapeHtml(companyInfo.companyName || "제일크레인")}</div>
+          <div class="invoice-company-name">${escapeHtml(companyInfo.companyName || "제일장비프로")}</div>
           <div class="invoice-company-item">대표자: ${escapeHtml(companyInfo.representativeName || "정보 없음")}</div>
           <div class="invoice-company-item">사업자등록번호: ${escapeHtml(companyInfo.businessNumber || "정보 없음")}</div>
           <div class="invoice-company-item">주소: ${escapeHtml(companyInfo.address || "정보 없음")}</div>
