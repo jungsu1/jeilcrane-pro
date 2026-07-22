@@ -54,6 +54,7 @@ function normalizeExpense(expense) {
 function normalizeCustomers(customers, jobs) {
   const normalized = [];
   const seen = new Set();
+  const pickCustomerField = (...values) => values.map((value) => String(value ?? "").trim()).find(Boolean) || "";
 
   (Array.isArray(customers) ? customers : []).forEach((customer) => {
     if (!customer || !customer.name) return;
@@ -62,8 +63,31 @@ function normalizeCustomers(customers, jobs) {
     normalized.push({
       id: customer.id || createId("customer"),
       name: customer.name,
-      manager: customer.manager || "",
-      memo: customer.memo || "",
+      representativeName: pickCustomerField(
+        customer.representativeName,
+        customer.representative,
+        customer.ceoName,
+        customer.ceo,
+        customer.ownerName,
+        customer.manager
+      ),
+      businessNumber: pickCustomerField(
+        customer.businessNumber,
+        customer.businessNo,
+        customer.registrationNumber,
+        customer.businessRegistrationNumber
+      ),
+      address: pickCustomerField(customer.address, customer.companyAddress, customer.addr),
+      phone: pickCustomerField(
+        customer.phone,
+        customer.phoneNumber,
+        customer.tel,
+        customer.telephone,
+        customer.mobile,
+        customer.managerPhone,
+        customer.contact
+      ),
+      email: pickCustomerField(customer.email, customer.mail),
       createdAt: customer.createdAt || new Date().toISOString()
     });
     seen.add(key);
@@ -76,8 +100,11 @@ function normalizeCustomers(customers, jobs) {
     normalized.push({
       id: job.customerId || createId("customer"),
       name: job.customerName,
-      manager: "",
-      memo: "",
+      representativeName: "",
+      businessNumber: "",
+      address: "",
+      phone: "",
+      email: "",
       createdAt: job.createdAt || new Date().toISOString()
     });
     seen.add(key);
@@ -608,10 +635,10 @@ function populateSettingsForm() {
 
 function setCustomerFormMode(isEditMode) {
   const submitButton = document.getElementById("customerSubmitBtn");
-  const cancelButton = document.getElementById("customerEditCancelBtn");
+  const deleteButton = document.getElementById("customerDeleteBtn");
 
-  if (submitButton) submitButton.textContent = isEditMode ? "거래처 수정 저장" : "거래처 등록";
-  if (cancelButton) cancelButton.classList.toggle("hidden", !isEditMode);
+  if (submitButton) submitButton.textContent = isEditMode ? "저장" : "거래처 등록";
+  if (deleteButton) deleteButton.classList.toggle("hidden", !isEditMode);
 }
 
 function resetCustomerFormToCreateMode() {
@@ -627,9 +654,13 @@ function startCustomerEdit(customer) {
   setView("settings");
   showSettingsSection("customer");
   document.getElementById("customerName").value = customer.name || "";
-  document.getElementById("customerManager").value = customer.manager || "";
-  document.getElementById("customerMemo").value = customer.memo || "";
+  document.getElementById("customerRepresentativeName").value = customer.representativeName || customer.manager || "";
+  document.getElementById("customerBusinessNumber").value = customer.businessNumber || "";
+  document.getElementById("customerAddress").value = customer.address || "";
+  document.getElementById("customerPhone").value = customer.phone || "";
+  document.getElementById("customerEmail").value = customer.email || "";
   setCustomerFormMode(true);
+  document.getElementById("customerForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
   document.getElementById("customerName").focus();
 }
 
@@ -686,7 +717,7 @@ function syncJobsForCustomerRename({ customerId, oldName, newName }) {
 
 function bindCustomerForms() {
   const customerForm = document.getElementById("customerForm");
-  const cancelEditButton = document.getElementById("customerEditCancelBtn");
+  const deleteButton = document.getElementById("customerDeleteBtn");
   document.getElementById("newCustomerBtn").addEventListener("click", () => toggleCustomerQuickAdd(true));
   document.getElementById("cancelQuickCustomerBtn").addEventListener("click", () => toggleCustomerQuickAdd(false));
   document.getElementById("saveQuickCustomerBtn").addEventListener("click", () => {
@@ -700,8 +731,11 @@ function bindCustomerForms() {
     const customer = {
       id: createId("customer"),
       name,
-      manager: document.getElementById("quickCustomerManager").value.trim(),
-      memo: document.getElementById("quickCustomerMemo").value.trim(),
+      representativeName: document.getElementById("quickCustomerRepresentativeName").value.trim(),
+      businessNumber: document.getElementById("quickCustomerBusinessNumber").value.trim(),
+      address: document.getElementById("quickCustomerAddress").value.trim(),
+      phone: document.getElementById("quickCustomerPhone").value.trim(),
+      email: document.getElementById("quickCustomerEmail").value.trim(),
       createdAt: new Date().toISOString()
     };
 
@@ -711,17 +745,23 @@ function bindCustomerForms() {
     renderAll();
     toggleCustomerQuickAdd(false);
     document.getElementById("quickCustomerName").value = "";
-    document.getElementById("quickCustomerManager").value = "";
-    document.getElementById("quickCustomerMemo").value = "";
+    document.getElementById("quickCustomerRepresentativeName").value = "";
+    document.getElementById("quickCustomerBusinessNumber").value = "";
+    document.getElementById("quickCustomerAddress").value = "";
+    document.getElementById("quickCustomerPhone").value = "";
+    document.getElementById("quickCustomerEmail").value = "";
     const jobCustomerSelect = document.getElementById("jobCustomer");
     jobCustomerSelect.value = customer.id;
     showToast("거래처가 등록되었습니다.");
   });
 
-  if (cancelEditButton) {
-    cancelEditButton.addEventListener("click", () => {
-      resetCustomerFormToCreateMode();
-      showToast("거래처 수정을 취소했습니다.");
+  if (deleteButton) {
+    deleteButton.addEventListener("click", () => {
+      if (!editingCustomerId) {
+        showToast("삭제할 거래처를 선택해주세요.");
+        return;
+      }
+      deleteCustomer(editingCustomerId);
     });
   }
 
@@ -756,8 +796,11 @@ function bindCustomerForms() {
       const updatedCustomer = {
         ...existingCustomer,
         name,
-        manager: document.getElementById("customerManager").value.trim(),
-        memo: document.getElementById("customerMemo").value.trim()
+        representativeName: document.getElementById("customerRepresentativeName").value.trim(),
+        businessNumber: document.getElementById("customerBusinessNumber").value.trim(),
+        address: document.getElementById("customerAddress").value.trim(),
+        phone: document.getElementById("customerPhone").value.trim(),
+        email: document.getElementById("customerEmail").value.trim()
       };
 
       state.customers[targetIndex] = updatedCustomer;
@@ -772,8 +815,11 @@ function bindCustomerForms() {
       const customer = {
         id: createId("customer"),
         name,
-        manager: document.getElementById("customerManager").value.trim(),
-        memo: document.getElementById("customerMemo").value.trim(),
+        representativeName: document.getElementById("customerRepresentativeName").value.trim(),
+        businessNumber: document.getElementById("customerBusinessNumber").value.trim(),
+        address: document.getElementById("customerAddress").value.trim(),
+        phone: document.getElementById("customerPhone").value.trim(),
+        email: document.getElementById("customerEmail").value.trim(),
         createdAt: new Date().toISOString()
       };
 
@@ -815,23 +861,12 @@ function renderCustomersView() {
   }
 
   list.innerHTML = state.customers.map((customer) => {
-    const managerText = customer.manager ? escapeHtml(customer.manager) : "담당자 미등록";
-    const memoText = customer.memo ? escapeHtml(customer.memo) : "메모 없음";
-
     return `
-      <article class="list-item customer-list-item">
+      <button type="button" class="list-item customer-list-item" data-action="select-customer-edit" data-id="${escapeHtml(customer.id)}" aria-label="${escapeHtml(customer.name)} 거래처 수정">
         <div class="customer-list-main">
           <strong>${escapeHtml(customer.name)}</strong>
-          <p>${managerText}</p>
-          <p>${memoText}</p>
         </div>
-        <div class="customer-item-side">
-          <div class="customer-item-actions">
-            <button class="tiny-btn" data-action="edit-customer" data-id="${escapeHtml(customer.id)}">수정</button>
-            <button class="tiny-btn danger" data-action="delete-customer" data-id="${escapeHtml(customer.id)}">삭제</button>
-          </div>
-        </div>
-      </article>
+      </button>
     `;
   }).join("");
 }
@@ -1520,6 +1555,8 @@ function buildSettlementStatementHtml(report) {
     selectedCustomer?.representativeName,
     selectedCustomer?.representative,
     selectedCustomer?.ceoName,
+    selectedCustomer?.ceo,
+    selectedCustomer?.ownerName,
     selectedCustomer?.manager
   );
   const customerPhone = pickCustomerField(
@@ -1660,7 +1697,7 @@ function buildSettlementStatementHtml(report) {
             <div class="statement-party-box">
               <h3>공급받는 자 정보</h3>
               <div>거래처명: ${escapeHtml(customerName || "-")}</div>
-              <div>대표자/담당자: ${escapeHtml(customerRepresentative)}</div>
+              <div>대표자: ${escapeHtml(customerRepresentative)}</div>
               <div>연락처: ${escapeHtml(customerPhone)}</div>
               <div>사업자번호: ${escapeHtml(customerBusinessNumber)}</div>
               <div>주소: ${escapeHtml(customerAddress)}</div>
@@ -1842,6 +1879,8 @@ async function createSettlementPdfDocument(report) {
 }
 
 async function downloadSettlementPdf() {
+  currentSettlementReport = buildSettlementReportData();
+
   if (!currentSettlementReport || currentSettlementReport.jobs.length === 0) {
     showToast("선택한 조건의 작업이 없어 저장할 수 없습니다.");
     return;
@@ -1858,6 +1897,8 @@ async function downloadSettlementPdf() {
 }
 
 function openSettlementStatement() {
+  currentSettlementReport = buildSettlementReportData();
+
   if (!currentSettlementReport || currentSettlementReport.jobs.length === 0) {
     showToast("선택한 조건의 작업이 없어 출력할 수 없습니다.");
     return;
@@ -2449,6 +2490,16 @@ function handleListActions(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   const { action, id, date } = button.dataset;
+
+  if (action === "select-customer-edit") {
+    const customer = state.customers.find((item) => item.id === id);
+    if (!customer) {
+      showToast("수정할 거래처를 찾지 못했습니다.");
+      return;
+    }
+    startCustomerEdit(customer);
+    return;
+  }
 
   if (action === "edit-customer") {
     const customer = state.customers.find((item) => item.id === id);
