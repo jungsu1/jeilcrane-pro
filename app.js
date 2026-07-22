@@ -635,10 +635,10 @@ function populateSettingsForm() {
 
 function setCustomerFormMode(isEditMode) {
   const submitButton = document.getElementById("customerSubmitBtn");
-  const deleteButton = document.getElementById("customerDeleteBtn");
+  const cancelButton = document.getElementById("customerEditCancelBtn");
 
-  if (submitButton) submitButton.textContent = isEditMode ? "저장" : "거래처 등록";
-  if (deleteButton) deleteButton.classList.toggle("hidden", !isEditMode);
+  if (submitButton) submitButton.textContent = isEditMode ? "거래처 수정 저장" : "거래처 등록";
+  if (cancelButton) cancelButton.classList.toggle("hidden", !isEditMode);
 }
 
 function resetCustomerFormToCreateMode() {
@@ -660,7 +660,6 @@ function startCustomerEdit(customer) {
   document.getElementById("customerPhone").value = customer.phone || "";
   document.getElementById("customerEmail").value = customer.email || "";
   setCustomerFormMode(true);
-  document.getElementById("customerForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
   document.getElementById("customerName").focus();
 }
 
@@ -717,7 +716,7 @@ function syncJobsForCustomerRename({ customerId, oldName, newName }) {
 
 function bindCustomerForms() {
   const customerForm = document.getElementById("customerForm");
-  const deleteButton = document.getElementById("customerDeleteBtn");
+  const cancelEditButton = document.getElementById("customerEditCancelBtn");
   document.getElementById("newCustomerBtn").addEventListener("click", () => toggleCustomerQuickAdd(true));
   document.getElementById("cancelQuickCustomerBtn").addEventListener("click", () => toggleCustomerQuickAdd(false));
   document.getElementById("saveQuickCustomerBtn").addEventListener("click", () => {
@@ -755,13 +754,10 @@ function bindCustomerForms() {
     showToast("거래처가 등록되었습니다.");
   });
 
-  if (deleteButton) {
-    deleteButton.addEventListener("click", () => {
-      if (!editingCustomerId) {
-        showToast("삭제할 거래처를 선택해주세요.");
-        return;
-      }
-      deleteCustomer(editingCustomerId);
+  if (cancelEditButton) {
+    cancelEditButton.addEventListener("click", () => {
+      resetCustomerFormToCreateMode();
+      showToast("거래처 수정을 취소했습니다.");
     });
   }
 
@@ -862,11 +858,17 @@ function renderCustomersView() {
 
   list.innerHTML = state.customers.map((customer) => {
     return `
-      <button type="button" class="list-item customer-list-item" data-action="select-customer-edit" data-id="${escapeHtml(customer.id)}" aria-label="${escapeHtml(customer.name)} 거래처 수정">
+      <article class="list-item customer-list-item">
         <div class="customer-list-main">
           <strong>${escapeHtml(customer.name)}</strong>
         </div>
-      </button>
+        <div class="customer-item-side">
+          <div class="customer-item-actions">
+            <button class="tiny-btn" data-action="edit-customer" data-id="${escapeHtml(customer.id)}">수정</button>
+            <button class="tiny-btn danger" data-action="delete-customer" data-id="${escapeHtml(customer.id)}">삭제</button>
+          </div>
+        </div>
+      </article>
     `;
   }).join("");
 }
@@ -2490,16 +2492,6 @@ function handleListActions(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   const { action, id, date } = button.dataset;
-
-  if (action === "select-customer-edit") {
-    const customer = state.customers.find((item) => item.id === id);
-    if (!customer) {
-      showToast("수정할 거래처를 찾지 못했습니다.");
-      return;
-    }
-    startCustomerEdit(customer);
-    return;
-  }
 
   if (action === "edit-customer") {
     const customer = state.customers.find((item) => item.id === id);
