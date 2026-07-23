@@ -10,7 +10,20 @@
     <link rel="manifest" href="manifest.json" />
     <link rel="stylesheet" href="style.css" />
   </head>
-  <body>
+  <body class="beta-auth-locked">
+    <div id="betaAuthScreen" class="beta-auth-screen" aria-hidden="false">
+      <div class="beta-auth-card">
+        <h1>JEIL PRO</h1>
+        <p class="beta-auth-subtitle">Beta Test</p>
+        <p class="beta-auth-description">베타 테스트 코드를 입력해주세요.</p>
+        <form id="betaAuthForm" class="beta-auth-form" autocomplete="off">
+          <input id="betaAuthCode" type="password" inputmode="text" autocomplete="one-time-code" placeholder="베타 코드 입력" aria-label="베타 코드" />
+          <button type="submit" class="primary-btn beta-auth-submit">확인</button>
+        </form>
+        <p id="betaAuthError" class="beta-auth-error" aria-live="polite"></p>
+      </div>
+    </div>
+
     <div class="app-shell">
       <header class="topbar">
         <div>
@@ -477,6 +490,7 @@
                 </div>
               </article>
             </div>
+            <button id="betaAuthResetBtn" class="ghost-btn beta-auth-reset-btn" type="button">베타 인증 초기화</button>
           </div>
         </section>
 
@@ -565,6 +579,7 @@
     <div id="toast" class="toast" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="auth.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

@@ -2772,7 +2772,10 @@ function registerServiceWorker() {
 
 const state = loadState();
 
-document.addEventListener("DOMContentLoaded", () => {
+function initializeApp() {
+  if (initializeApp.hasRun) return;
+  initializeApp.hasRun = true;
+
   initializeSettingsSectionPlacement();
   bindNavigation();
   bindForm();
@@ -2889,4 +2892,13 @@ document.addEventListener("DOMContentLoaded", () => {
   renderAll();
   setView("dashboard");
   registerServiceWorker();
-});
+}
+
+window.jeilProInitializeApp = initializeApp;
+
+if (window.jeilProPendingAppStart) {
+  window.jeilProPendingAppStart = false;
+  initializeApp();
+} else if (!window.jeilProUseBetaAuth) {
+  document.addEventListener("DOMContentLoaded", initializeApp);
+}
