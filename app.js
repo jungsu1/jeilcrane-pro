@@ -1685,6 +1685,15 @@ function buildSettlementTrendBarHeight(monthSales, maxSales) {
   return `max(12px, ${heightPercent.toFixed(2)}%)`;
 }
 
+function buildSettlementTrendDetailItem(label, value) {
+  return `
+    <div class="settlement-trend-detail-item">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+}
+
 function buildSettlementTrendSummaryCardHtml() {
   const arrow = settlementTrendExpanded ? "▲" : "▼";
   return `
@@ -1759,9 +1768,9 @@ function buildSettlementTrendPanelHtml() {
           ${barsHtml}
         </div>
 
-        <div class="settlement-trend-detail">
-          <h4>${escapeHtml(selectedMonthData.label)}</h4>
-          <p>총매출 ${escapeHtml(formatCurrency(selectedMonthData.totalSales))}</p>
+        <div class="settlement-trend-detail" aria-label="선택한 월 상세정보">
+          ${buildSettlementTrendDetailItem("선택한 월", selectedMonthData.label)}
+          ${buildSettlementTrendDetailItem("총매출", formatCurrency(selectedMonthData.totalSales))}
         </div>
       </div>
     </div>

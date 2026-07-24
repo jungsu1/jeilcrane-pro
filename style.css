@@ -849,13 +849,13 @@ input[type="file"] { display: none; }
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 14px;
   background: rgba(255,255,255,0.03);
-  padding: 12px;
+  padding: 10px;
   margin-top: -2px;
 }
 
 .settlement-trend-content {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .settlement-trend-year-row {
@@ -871,7 +871,7 @@ input[type="file"] { display: none; }
 }
 
 .settlement-trend-chart {
-  height: 180px;
+  height: 156px;
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 4px;
@@ -900,12 +900,12 @@ input[type="file"] { display: none; }
   justify-content: center;
   border-radius: 10px;
   background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(15, 23, 42, 0.2));
-  padding: 4px 2px;
+  padding: 3px 2px 4px;
 }
 
 .settlement-trend-bar {
   width: 100%;
-  max-width: 22px;
+  max-width: 24px;
   min-height: 0;
   border-radius: 8px 8px 4px 4px;
   background: linear-gradient(180deg, rgba(34, 211, 238, 0.95), rgba(59, 130, 246, 0.72));
@@ -935,14 +935,23 @@ input[type="file"] { display: none; }
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.45);
   padding: 10px;
+  display: grid;
+  gap: 8px;
 }
 
-.settlement-trend-detail h4 {
-  margin: 0 0 8px;
-  font-size: 0.98rem;
+.settlement-trend-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
-.settlement-trend-detail p {
+.settlement-trend-detail-item span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.settlement-trend-detail-item strong {
   margin: 0;
   font-size: 0.9rem;
   line-height: 1.45;
@@ -950,12 +959,33 @@ input[type="file"] { display: none; }
 
 @media (min-width: 768px) {
   .settlement-trend-chart {
-    height: 220px;
+    height: 176px;
     gap: 6px;
   }
 
   .settlement-trend-month-label {
     font-size: 0.72rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .settlement-trend-chart {
+    height: 138px;
+    gap: 3px;
+  }
+
+  .settlement-trend-month-btn {
+    gap: 4px;
+  }
+
+  .settlement-trend-month-label {
+    font-size: 0.62rem;
+  }
+
+  .settlement-trend-detail-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
   }
 }
 
