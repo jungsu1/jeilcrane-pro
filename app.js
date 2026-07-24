@@ -16,6 +16,7 @@ let pendingDeleteExpenseId = null;
 let editingCustomerId = null;
 let activeSettingsSheetSection = null;
 let settingsSheetHistoryActive = false;
+let backupRestoreConfirmResolver = null;
 const settingsSectionPlacement = new Map();
 
 const SETTINGS_SECTION_CONFIG = {
@@ -2753,26 +2754,184 @@ function exportBackup() {
   showToast("백업 파일이 다운로드되었습니다.");
 }
 
-function importBackup(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
+function closeBackupRestoreConfirm(confirmed) {
+  const modal = document.getElementById("restoreBackupModal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  }
+
+  if (backupRestoreConfirmResolver) {
+    const resolve = backupRestoreConfirmResolver;
+    backupRestoreConfirmResolver = null;
+    resolve(Boolean(confirmed));
+  }
+}
+
+function openBackupRestoreConfirm() {
+  const modal = document.getElementById("restoreBackupModal");
+  if (!modal) {
+    return Promise.resolve(
+      window.confirm("백업 파일의 데이터로 복원하시겠습니까?\n현재 데이터가 백업 데이터로 변경됩니다.")
+    );
+  }
+
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  return new Promise((resolve) => {
+    backupRestoreConfirmResolver = resolve;
+  });
+}
+
+function readFileTextWithFileReader(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      resolve(typeof reader.result === "string" ? reader.result : String(reader.result || ""));
+    };
+
+    reader.onerror = () => {
+      reject(reader.error || new Error("FileReader failed"));
+    };
+
+    reader.readAsText(file, "UTF-8");
+  });
+}
+
+async function readBackupFileText(file) {
+  if (file && typeof file.text === "function") {
     try {
-      const imported = JSON.parse(reader.result);
-      state.jobs = Array.isArray(imported.jobs) ? imported.jobs : state.jobs;
-      state.customers = normalizeCustomers(imported.customers, state.jobs);
-      state.expenses = Array.isArray(imported.expenses) ? imported.expenses.map(normalizeExpense) : [];
-      saveState();
-      renderAll();
-      showToast("데이터를 복구했습니다.");
+      return await file.text();
     } catch (error) {
-      console.error(error);
-      showToast("복구에 실패했습니다.");
+      return readFileTextWithFileReader(file);
     }
-  };
-  reader.readAsText(file);
-  event.target.value = "";
+  }
+
+  return readFileTextWithFileReader(file);
+}
+
+function normalizeImportedJobs(jobs) {
+  return jobs.map((job) => ({
+    ...job,
+    status: job.status || "진행중",
+    receivableStatus: job.receivableStatus || "미수",
+    invoiceIssued: job.invoiceIssued || "미발행",
+    payoutStatus: job.payoutStatus || "미지급",
+    workTime: job.workTime || ""
+  }));
+}
+
+function applyBackupData(imported) {
+  let restoredAny = false;
+
+  if (Object.prototype.hasOwnProperty.call(imported, "jobs")) {
+    if (!Array.isArray(imported.jobs)) throw new Error("INVALID_BACKUP_FORMAT");
+    state.jobs = normalizeImportedJobs(imported.jobs);
+    restoredAny = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(imported, "expenses")) {
+    if (!Array.isArray(imported.expenses)) throw new Error("INVALID_BACKUP_FORMAT");
+    state.expenses = imported.expenses.map(normalizeExpense);
+    restoredAny = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(imported, "customers")) {
+    if (!Array.isArray(imported.customers)) throw new Error("INVALID_BACKUP_FORMAT");
+    state.customers = normalizeCustomers(imported.customers, state.jobs);
+    restoredAny = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(imported, "companyInfo")) {
+    if (!imported.companyInfo || typeof imported.companyInfo !== "object" || Array.isArray(imported.companyInfo)) {
+      throw new Error("INVALID_BACKUP_FORMAT");
+    }
+    state.companyInfo = {
+      ...getDefaultCompanyInfo(),
+      ...imported.companyInfo
+    };
+    restoredAny = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(imported, "invoiceNumberState")) {
+    if (
+      !imported.invoiceNumberState ||
+      typeof imported.invoiceNumberState !== "object" ||
+      Array.isArray(imported.invoiceNumberState)
+    ) {
+      throw new Error("INVALID_BACKUP_FORMAT");
+    }
+
+    state.invoiceNumberState = {
+      date: String(imported.invoiceNumberState.date || ""),
+      sequence: Number(imported.invoiceNumberState.sequence || 0)
+    };
+    restoredAny = true;
+  }
+
+  return restoredAny;
+}
+
+async function importBackup(event) {
+  const input = event.target;
+  const file = input?.files?.[0];
+  if (!file) {
+    if (input) input.value = "";
+    return;
+  }
+
+  const confirmed = await openBackupRestoreConfirm();
+  if (!confirmed) {
+    if (input) input.value = "";
+    return;
+  }
+
+  let rawText;
+  try {
+    rawText = await readBackupFileText(file);
+  } catch (error) {
+    console.error(error);
+    showToast("백업 파일을 읽을 수 없습니다.");
+    if (input) input.value = "";
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch (error) {
+    console.error(error);
+    showToast("올바른 백업 파일이 아닙니다.");
+    if (input) input.value = "";
+    return;
+  }
+
+  try {
+    const importedRoot = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+    const candidate =
+      importedRoot && importedRoot.data && typeof importedRoot.data === "object" && !Array.isArray(importedRoot.data)
+        ? importedRoot.data
+        : importedRoot;
+
+    if (!candidate || !applyBackupData(candidate)) {
+      throw new Error("INVALID_BACKUP_FORMAT");
+    }
+
+    saveState();
+    populateSettingsForm();
+    renderAll();
+    showToast("복원이 완료되었습니다.");
+  } catch (error) {
+    console.error(error);
+    if (error && error.message === "INVALID_BACKUP_FORMAT") {
+      showToast("올바른 백업 파일이 아닙니다.");
+    } else {
+      showToast("복원 중 오류가 발생했습니다.");
+    }
+  } finally {
+    if (input) input.value = "";
+  }
 }
 
 function renderAll() {
@@ -2814,8 +2973,31 @@ function initializeApp() {
   if (backupBtn) {
     backupBtn.addEventListener("click", exportBackup);
   }
-  document.getElementById("exportBtn").addEventListener("click", exportBackup);
-  document.getElementById("importFile").addEventListener("change", importBackup);
+  document.querySelectorAll("[data-backup-export]").forEach((button) => {
+    button.addEventListener("click", exportBackup);
+  });
+  document.querySelectorAll("[data-backup-import]").forEach((input) => {
+    input.addEventListener("click", () => {
+      input.value = "";
+    });
+    input.addEventListener("change", importBackup);
+  });
+  const cancelRestoreBackupBtn = document.getElementById("cancelRestoreBackupBtn");
+  if (cancelRestoreBackupBtn) {
+    cancelRestoreBackupBtn.addEventListener("click", () => closeBackupRestoreConfirm(false));
+  }
+  const confirmRestoreBackupBtn = document.getElementById("confirmRestoreBackupBtn");
+  if (confirmRestoreBackupBtn) {
+    confirmRestoreBackupBtn.addEventListener("click", () => closeBackupRestoreConfirm(true));
+  }
+  const restoreBackupModal = document.getElementById("restoreBackupModal");
+  if (restoreBackupModal) {
+    restoreBackupModal.addEventListener("click", (event) => {
+      if (event.target.id === "restoreBackupModal") {
+        closeBackupRestoreConfirm(false);
+      }
+    });
+  }
   document.getElementById("closeInvoiceBtn").addEventListener("click", closeInvoice);
   document.getElementById("settlementStatementBtn").addEventListener("click", openSettlementStatement);
   document.getElementById("closeReportBtn").addEventListener("click", closeSettlementStatement);

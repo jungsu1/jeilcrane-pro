@@ -456,9 +456,9 @@
               <span class="muted">JSON 저장소</span>
             </div>
             <p class="muted">로컬 저장소에 저장된 작업 및 거래처 데이터를 JSON으로 백업하고 복구할 수 있습니다.</p>
-            <button id="exportBtn" class="primary-btn full">JSON 백업</button>
-            <label class="file-btn full" for="importFile">JSON 복구</label>
-            <input id="importFile" type="file" accept="application/json" />
+            <button id="exportBtnSettings" class="primary-btn full" data-backup-export="true">JSON 백업</button>
+            <label class="file-btn full" for="importFileSettings">JSON 복구</label>
+            <input id="importFileSettings" data-backup-import="true" type="file" accept="application/json,.json" />
           </div>
 
           <div id="settingsAppInfoSection" class="card hidden">
@@ -503,9 +503,9 @@
               <span class="muted">JSON 저장소</span>
             </div>
             <p class="muted">로컬 저장소에 저장된 작업 및 거래처 데이터를 JSON으로 백업하고 복구할 수 있습니다.</p>
-            <button id="exportBtn" class="primary-btn full">JSON 백업</button>
-            <label class="file-btn full" for="importFile">JSON 복구</label>
-            <input id="importFile" type="file" accept="application/json" />
+            <button id="exportBtnBackupView" class="primary-btn full" data-backup-export="true">JSON 백업</button>
+            <label class="file-btn full" for="importFileBackupView">JSON 복구</label>
+            <input id="importFileBackupView" data-backup-import="true" type="file" accept="application/json,.json" />
           </div>
         </section>
       </main>
@@ -585,6 +585,17 @@
         <p>안전하게 마무리하세요.</p>
         <div class="confirm-actions">
           <button id="dailyFinishConfirmBtn" type="button" class="primary-btn">확인</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="restoreBackupModal" class="modal hidden" aria-hidden="true">
+      <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="restoreBackupModalTitle">
+        <h3 id="restoreBackupModalTitle">백업 복원</h3>
+        <p>백업 파일의 데이터로 복원하시겠습니까?<br />현재 데이터가 백업 데이터로 변경됩니다.</p>
+        <div class="confirm-actions">
+          <button id="cancelRestoreBackupBtn" type="button" class="ghost-btn">취소</button>
+          <button id="confirmRestoreBackupBtn" type="button" class="primary-btn">복원</button>
         </div>
       </div>
     </div>
