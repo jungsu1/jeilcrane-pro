@@ -1178,6 +1178,25 @@ input[type="file"] { display: none; }
   margin-top: 16px;
 }
 
+.daily-finish-dialog {
+  text-align: center;
+  padding-top: 22px;
+}
+
+.daily-finish-emoji {
+  margin: 0 0 10px;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.daily-finish-dialog .confirm-actions {
+  justify-content: center;
+}
+
+.daily-finish-dialog .primary-btn {
+  min-width: 116px;
+}
+
 .danger-btn {
   background: linear-gradient(135deg, #fb7185, #e11d48);
 }

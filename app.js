@@ -1,4 +1,5 @@
 ﻿const STORAGE_KEY = "jeilcrane-pro-db-v2";
+const DAILY_FINISH_POPUP_KEY = "jeilcrane-pro-daily-finish-popup-date";
 const EXPENSE_CATEGORIES = ["주유", "장비수리", "소모품", "식비", "보험", "기타"];
 let selectedCustomerId = null;
 let selectedCalendarDate = null;
@@ -226,6 +227,31 @@ function showToast(message) {
   toast.classList.add("show");
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => toast.classList.remove("show"), 1800);
+}
+
+function openDailyFinishModal() {
+  const modal = document.getElementById("dailyFinishModal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeDailyFinishModal() {
+  const modal = document.getElementById("dailyFinishModal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+function shouldShowDailyFinishPopup(todayCount) {
+  if (todayCount < 2) return false;
+  return localStorage.getItem(DAILY_FINISH_POPUP_KEY) !== getToday();
+}
+
+function showDailyFinishPopupIfNeeded(todayCount) {
+  if (!shouldShowDailyFinishPopup(todayCount)) return;
+  localStorage.setItem(DAILY_FINISH_POPUP_KEY, getToday());
+  openDailyFinishModal();
 }
 
 function formatDateKey(date) {
@@ -2306,13 +2332,12 @@ function renderDashboard() {
   `).join("");
 
   const celebration = document.getElementById("celebrationMessage");
-  if (todayCount >= 2) {
-    celebration.textContent = "🎉 오늘도 작업을 등록해 주셨네요!";
-    celebration.classList.remove("hidden");
-  } else {
+  if (celebration) {
     celebration.textContent = "";
     celebration.classList.add("hidden");
   }
+
+  showDailyFinishPopupIfNeeded(todayCount);
 
   const todayList = todayJobs.length
     ? todayJobs.map((job) => `
@@ -2817,6 +2842,10 @@ function initializeApp() {
   document.getElementById("confirmDeleteExpenseBtn").addEventListener("click", confirmDeleteExpense);
   document.getElementById("deleteExpenseModal").addEventListener("click", (event) => {
     if (event.target.id === "deleteExpenseModal") closeDeleteExpenseModal();
+  });
+  document.getElementById("dailyFinishConfirmBtn").addEventListener("click", closeDailyFinishModal);
+  document.getElementById("dailyFinishModal").addEventListener("click", (event) => {
+    if (event.target.id === "dailyFinishModal") closeDailyFinishModal();
   });
   document.getElementById("invoiceModal").addEventListener("click", (event) => {
     if (event.target.id === "invoiceModal") closeInvoice();
