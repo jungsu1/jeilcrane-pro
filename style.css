@@ -834,6 +834,122 @@ input[type="file"] { display: none; }
   padding: 10px;
 }
 
+.settlement-trend-summary-card h4 {
+  margin-bottom: 8px;
+}
+
+.settlement-trend-panel {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  padding: 12px;
+  margin-top: -2px;
+}
+
+.settlement-trend-content {
+  display: grid;
+  gap: 12px;
+}
+
+.settlement-trend-year-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.settlement-trend-year-row .ghost-btn {
+  min-width: 42px;
+  padding: 6px 8px;
+}
+
+.settlement-trend-chart {
+  height: 180px;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 4px;
+  align-items: end;
+}
+
+.settlement-trend-month-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.settlement-trend-bar-wrap {
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(15, 23, 42, 0.2));
+  padding: 4px 2px;
+}
+
+.settlement-trend-bar {
+  width: 100%;
+  max-width: 22px;
+  min-height: 0;
+  border-radius: 8px 8px 4px 4px;
+  background: linear-gradient(180deg, rgba(34, 211, 238, 0.95), rgba(59, 130, 246, 0.72));
+  box-shadow: 0 6px 12px rgba(56, 189, 248, 0.2);
+}
+
+.settlement-trend-month-btn.selected .settlement-trend-bar {
+  background: linear-gradient(180deg, rgba(125, 211, 252, 1), rgba(14, 165, 233, 0.9));
+  box-shadow: 0 0 0 1px rgba(186, 230, 253, 0.8), 0 8px 14px rgba(14, 165, 233, 0.3);
+}
+
+.settlement-trend-month-btn.selected .settlement-trend-month-label {
+  color: #e0f2fe;
+  font-weight: 700;
+}
+
+.settlement-trend-month-label {
+  font-size: 0.66rem;
+  line-height: 1.2;
+  text-align: center;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.settlement-trend-detail {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 10px;
+}
+
+.settlement-trend-detail h4 {
+  margin: 0 0 8px;
+  font-size: 0.98rem;
+}
+
+.settlement-trend-detail p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+@media (min-width: 768px) {
+  .settlement-trend-chart {
+    height: 220px;
+    gap: 6px;
+  }
+
+  .settlement-trend-month-label {
+    font-size: 0.72rem;
+  }
+}
+
 .settlement-card-item {
   align-items: center;
   padding: 12px 0;
@@ -912,6 +1028,10 @@ input[type="file"] { display: none; }
   .metric-grid,
   .metric-grid.compact-grid {
     grid-template-columns: 1fr;
+  }
+
+  #settlementSummary.metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .job-card-meta,

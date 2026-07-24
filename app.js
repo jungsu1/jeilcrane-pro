@@ -17,6 +17,9 @@ let editingCustomerId = null;
 let activeSettingsSheetSection = null;
 let settingsSheetHistoryActive = false;
 let backupRestoreConfirmResolver = null;
+let settlementTrendExpanded = false;
+let settlementTrendYear = new Date().getFullYear();
+let settlementTrendSelectedMonth = new Date().getMonth() + 1;
 const settingsSectionPlacement = new Map();
 
 const SETTINGS_SECTION_CONFIG = {
@@ -1633,6 +1636,130 @@ function buildSettlementReportData() {
   };
 }
 
+function getMonthRangeKeysByYearMonth(year, monthIndex) {
+  const start = new Date(year, monthIndex, 1);
+  const end = new Date(year, monthIndex + 1, 0);
+  return {
+    startKey: formatDateKey(start),
+    endKey: formatDateKey(end)
+  };
+}
+
+function buildSettlementTrendMonthData(year, monthIndex) {
+  const range = getMonthRangeKeysByYearMonth(year, monthIndex);
+  const monthJobs = state.jobs.filter((job) => isDateInRange(job.date, range));
+  const monthExpenses = state.expenses.filter((expense) => isDateInRange(expense.date, range));
+  const equipmentJobs = monthJobs.filter((job) => job.jobType === "내 장비 작업");
+  const outstandingReceivables = equipmentJobs.filter((job) => job.receivableStatus === "미수");
+
+  const totalSales = equipmentJobs.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
+  const totalExpenses = monthExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+
+  return {
+    monthNumber: monthIndex + 1,
+    label: `${monthIndex + 1}월`,
+    totalSales,
+    jobCount: monthJobs.length,
+    totalExpenses,
+    netProfit: totalSales - totalExpenses,
+    outstandingReceivable: outstandingReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0)
+  };
+}
+
+function buildSettlementTrendYearData(year) {
+  const months = Array.from({ length: 12 }, (_, monthIndex) => buildSettlementTrendMonthData(year, monthIndex));
+  const maxSales = months.reduce((max, month) => Math.max(max, month.totalSales), 0);
+  return { months, maxSales };
+}
+
+function buildSettlementTrendSummaryCardHtml() {
+  const arrow = settlementTrendExpanded ? "▲" : "▼";
+  return `
+    <button
+      type="button"
+      class="metric-card settlement-summary-card settlement-summary-btn settlement-trend-summary-card ${settlementTrendExpanded ? "open" : ""}"
+      data-action="toggle-settlement-trend"
+      aria-expanded="${settlementTrendExpanded ? "true" : "false"}"
+      aria-controls="settlementTrendPanel"
+    >
+      <h4>매출 추이</h4>
+      <div class="settlement-summary-value-row">
+        <strong>${escapeHtml(`${settlementTrendYear}년`)}</strong>
+        <span class="settlement-summary-arrow" aria-hidden="true">${arrow}</span>
+      </div>
+    </button>
+  `;
+}
+
+function buildSettlementTrendPanelHtml() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  if (settlementTrendYear > currentYear) {
+    settlementTrendYear = currentYear;
+  }
+
+  if (!Number.isInteger(settlementTrendSelectedMonth) || settlementTrendSelectedMonth < 1 || settlementTrendSelectedMonth > 12) {
+    settlementTrendSelectedMonth = now.getMonth() + 1;
+  }
+
+  const yearData = buildSettlementTrendYearData(settlementTrendYear);
+  const selectedMonthData = yearData.months[settlementTrendSelectedMonth - 1] || yearData.months[now.getMonth()];
+  const isNextDisabled = settlementTrendYear >= currentYear;
+
+  const barsHtml = yearData.months.map((monthData) => {
+    const ratio = yearData.maxSales > 0 ? monthData.totalSales / yearData.maxSales : 0;
+    const barHeight = yearData.maxSales > 0 ? Math.max(ratio * 100, monthData.totalSales > 0 ? 4 : 0) : 0;
+    const isSelected = monthData.monthNumber === settlementTrendSelectedMonth;
+
+    return `
+      <button
+        type="button"
+        class="settlement-trend-month-btn ${isSelected ? "selected" : ""}"
+        data-action="select-settlement-trend-month"
+        data-month="${monthData.monthNumber}"
+        aria-pressed="${isSelected ? "true" : "false"}"
+        aria-label="${escapeHtml(`${monthData.label} 매출 ${formatCurrency(monthData.totalSales)}`)}"
+      >
+        <span class="settlement-trend-bar-wrap">
+          <span class="settlement-trend-bar" style="height:${barHeight.toFixed(2)}%;"></span>
+        </span>
+        <span class="settlement-trend-month-label">${escapeHtml(monthData.label)}</span>
+      </button>
+    `;
+  }).join("");
+
+  return `
+    <div id="settlementTrendPanel" class="settlement-trend-panel" aria-label="매출 추이 상세">
+      <div class="settlement-trend-content">
+        <div class="settlement-trend-year-row">
+          <button type="button" class="ghost-btn compact" data-action="settlement-trend-year-prev" aria-label="이전 연도">〈</button>
+          <strong>${settlementTrendYear}년</strong>
+          <button
+            type="button"
+            class="ghost-btn compact"
+            data-action="settlement-trend-year-next"
+            aria-label="다음 연도"
+            ${isNextDisabled ? "disabled" : ""}
+          >〉</button>
+        </div>
+
+        <div class="settlement-trend-chart" role="img" aria-label="${escapeHtml(`${settlementTrendYear}년 월별 총매출 막대그래프`)}">
+          ${barsHtml}
+        </div>
+
+        <div class="settlement-trend-detail">
+          <h4>${escapeHtml(selectedMonthData.label)}</h4>
+          <p>총매출 ${escapeHtml(formatCurrency(selectedMonthData.totalSales))}</p>
+          <p>작업건수 ${escapeHtml(`${selectedMonthData.jobCount}건`)}</p>
+          <p>총지출 ${escapeHtml(formatCurrency(selectedMonthData.totalExpenses))}</p>
+          <p>순이익 ${escapeHtml(formatCurrency(selectedMonthData.netProfit))}</p>
+          <p>미수금 ${escapeHtml(formatCurrency(selectedMonthData.outstandingReceivable))}</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function buildSettlementCustomerOptions() {
   const select = document.getElementById("settlementCustomerSelect");
   if (!select) return;
@@ -1700,7 +1827,10 @@ function renderSettlementView() {
     `;
   }).join("");
 
-  document.getElementById("settlementSummary").innerHTML = summaryCardsHtml;
+  const trendCardHtml = buildSettlementTrendSummaryCardHtml();
+  const trendPanelHtml = settlementTrendExpanded ? buildSettlementTrendPanelHtml() : "";
+
+  document.getElementById("settlementSummary").innerHTML = `${summaryCardsHtml}${trendCardHtml}${trendPanelHtml}`;
   document.getElementById("settlementCustomers").innerHTML = "";
   document.getElementById("settlementJobList").innerHTML = "";
 }
@@ -2674,6 +2804,36 @@ function handleListActions(event) {
     const detailKey = button.dataset.detailKey || "";
     activeSettlementDetailKey = activeSettlementDetailKey === detailKey ? null : detailKey;
     renderSettlementView();
+    return;
+  }
+
+  if (action === "toggle-settlement-trend") {
+    settlementTrendExpanded = !settlementTrendExpanded;
+    renderSettlementView();
+    return;
+  }
+
+  if (action === "settlement-trend-year-prev") {
+    settlementTrendYear -= 1;
+    renderSettlementView();
+    return;
+  }
+
+  if (action === "settlement-trend-year-next") {
+    const currentYear = new Date().getFullYear();
+    if (settlementTrendYear < currentYear) {
+      settlementTrendYear += 1;
+      renderSettlementView();
+    }
+    return;
+  }
+
+  if (action === "select-settlement-trend-month") {
+    const monthValue = Number(button.dataset.month || 0);
+    if (monthValue >= 1 && monthValue <= 12) {
+      settlementTrendSelectedMonth = monthValue;
+      renderSettlementView();
+    }
     return;
   }
 
