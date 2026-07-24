@@ -1672,6 +1672,19 @@ function buildSettlementTrendYearData(year) {
   return { months, maxSales };
 }
 
+function buildSettlementTrendBarHeight(monthSales, maxSales) {
+  if (maxSales <= 0) {
+    return "0px";
+  }
+
+  if (monthSales <= 0) {
+    return "4px";
+  }
+
+  const heightPercent = (monthSales / maxSales) * 100;
+  return `max(12px, ${heightPercent.toFixed(2)}%)`;
+}
+
 function buildSettlementTrendSummaryCardHtml() {
   const arrow = settlementTrendExpanded ? "▲" : "▼";
   return `
@@ -1707,8 +1720,7 @@ function buildSettlementTrendPanelHtml() {
   const isNextDisabled = settlementTrendYear >= currentYear;
 
   const barsHtml = yearData.months.map((monthData) => {
-    const ratio = yearData.maxSales > 0 ? monthData.totalSales / yearData.maxSales : 0;
-    const barHeight = yearData.maxSales > 0 ? Math.max(ratio * 100, monthData.totalSales > 0 ? 4 : 0) : 0;
+    const barHeight = buildSettlementTrendBarHeight(monthData.totalSales, yearData.maxSales);
     const isSelected = monthData.monthNumber === settlementTrendSelectedMonth;
 
     return `
@@ -1721,7 +1733,7 @@ function buildSettlementTrendPanelHtml() {
         aria-label="${escapeHtml(`${monthData.label} 매출 ${formatCurrency(monthData.totalSales)}`)}"
       >
         <span class="settlement-trend-bar-wrap">
-          <span class="settlement-trend-bar" style="height:${barHeight.toFixed(2)}%;"></span>
+          <span class="settlement-trend-bar" style="height:${barHeight};"></span>
         </span>
         <span class="settlement-trend-month-label">${escapeHtml(monthData.label)}</span>
       </button>
@@ -1750,10 +1762,6 @@ function buildSettlementTrendPanelHtml() {
         <div class="settlement-trend-detail">
           <h4>${escapeHtml(selectedMonthData.label)}</h4>
           <p>총매출 ${escapeHtml(formatCurrency(selectedMonthData.totalSales))}</p>
-          <p>작업건수 ${escapeHtml(`${selectedMonthData.jobCount}건`)}</p>
-          <p>총지출 ${escapeHtml(formatCurrency(selectedMonthData.totalExpenses))}</p>
-          <p>순이익 ${escapeHtml(formatCurrency(selectedMonthData.netProfit))}</p>
-          <p>미수금 ${escapeHtml(formatCurrency(selectedMonthData.outstandingReceivable))}</p>
         </div>
       </div>
     </div>

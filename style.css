@@ -185,6 +185,12 @@ button, input, select, textarea {
   margin-bottom: 14px;
 }
 
+@media (max-width: 600px) {
+  #settlementSummary.metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .metric-grid.compact-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -869,7 +875,7 @@ input[type="file"] { display: none; }
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 4px;
-  align-items: end;
+  align-items: stretch;
 }
 
 .settlement-trend-month-btn {
@@ -877,15 +883,18 @@ input[type="file"] { display: none; }
   background: transparent;
   color: var(--muted);
   padding: 0;
-  display: grid;
-  grid-template-rows: 1fr auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   gap: 6px;
   min-width: 0;
   cursor: pointer;
 }
 
 .settlement-trend-bar-wrap {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1031,7 +1040,7 @@ input[type="file"] { display: none; }
   }
 
   #settlementSummary.metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .job-card-meta,
