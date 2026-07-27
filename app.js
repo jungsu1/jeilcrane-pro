@@ -2253,7 +2253,9 @@ function bindExpenseForm() {
     event.preventDefault();
     const date = document.getElementById("expenseDate").value;
     const category = document.getElementById("expenseCategory").value;
-    const amount = Number(document.getElementById("expenseAmount").value || 0);
+    const amountInput = document.getElementById("expenseAmount");
+    const amountRaw = String(amountInput?.value || "").trim();
+    const amount = Number(amountRaw);
     const memo = document.getElementById("expenseMemo").value.trim();
 
     if (!date) {
@@ -2266,8 +2268,8 @@ function bindExpenseForm() {
       return;
     }
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      showToast("금액은 0보다 커야 합니다.");
+    if (!amountRaw || !Number.isInteger(amount) || amount < 1) {
+      showToast("금액은 1원 이상의 정수만 입력할 수 있습니다.");
       return;
     }
 
