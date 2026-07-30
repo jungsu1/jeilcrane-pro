@@ -1544,6 +1544,47 @@ input[type="file"] { display: none; }
   overflow: hidden;
 }
 
+.report-option-panel {
+  padding: 12px 12px 8px;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.report-option-title {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.report-option-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.report-option-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 0.86rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.report-option-radio input[type="radio"] {
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
 .report-toolbar {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1831,6 +1872,10 @@ input[type="file"] { display: none; }
   body.print-settlement .report-toolbar,
   body.print-settlement .topbar,
   body.print-settlement .bottom-nav {
+    display: none !important;
+  }
+
+  body.print-settlement .report-option-panel {
     display: none !important;
   }
 

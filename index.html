@@ -124,6 +124,7 @@
                   <select id="receivableStatus">
                     <option value="미수">미수</option>
                     <option value="수금완료">수금완료</option>
+                    <option value="직접수금">직접수금</option>
                   </select>
                 </div>
                 <div class="form-group">
@@ -535,6 +536,19 @@
 
     <div id="settlementStatementModal" class="modal hidden" aria-hidden="true">
       <div class="invoice-sheet settlement-statement-sheet report-modal">
+        <div id="statementDirectCollectionOptionPanel" class="report-option-panel" role="group" aria-label="직접수금 출력 옵션">
+          <p class="report-option-title">직접수금 내역을 포함하시겠습니까?</p>
+          <div class="report-option-group">
+            <label class="report-option-radio">
+              <input type="radio" name="statementDirectCollectionOption" value="include" />
+              <span>포함</span>
+            </label>
+            <label class="report-option-radio">
+              <input type="radio" name="statementDirectCollectionOption" value="exclude" checked />
+              <span>제외</span>
+            </label>
+          </div>
+        </div>
         <div class="report-toolbar">
           <button type="button" class="report-action-btn" id="savePdfBtn">PDF 저장</button>
           <button type="button" class="report-action-btn" id="printReportBtn">인쇄</button>

@@ -1,5 +1,6 @@
 ﻿const STORAGE_KEY = "jeilcrane-pro-db-v2";
 const DAILY_FINISH_POPUP_KEY = "jeilcrane-pro-daily-finish-popup-date";
+const DIRECT_COLLECTION_STATUS = "직접수금";
 const EXPENSE_CATEGORIES = ["주유", "장비수리", "소모품", "식비", "보험", "기타"];
 let selectedCustomerId = null;
 let selectedCalendarDate = null;
@@ -7,6 +8,7 @@ let calendarViewDate = new Date();
 let selectedSettlementPeriod = "this-month";
 let selectedSettlementCustomer = "all";
 let currentSettlementReport = null;
+let includeDirectCollectionInStatement = false;
 let activeSettlementDetailKey = null;
 let selectedExpensePeriod = "this-month";
 let editingJobId = null;
@@ -1799,6 +1801,7 @@ function buildSettlementCustomerOptions() {
 function renderSettlementView() {
   updateSettlementPeriodUI();
   buildSettlementCustomerOptions();
+  updateStatementDirectCollectionOptionVisibility();
 
   currentSettlementReport = buildSettlementReportData();
   window.jeilcraneSettlementReport = currentSettlementReport;
@@ -1850,6 +1853,47 @@ function renderSettlementView() {
   document.getElementById("settlementSummary").innerHTML = `${summaryCardsHtml}${trendCardHtml}${trendPanelHtml}`;
   document.getElementById("settlementCustomers").innerHTML = "";
   document.getElementById("settlementJobList").innerHTML = "";
+}
+
+function getStatementDirectCollectionOption() {
+  const selected = document.querySelector('input[name="statementDirectCollectionOption"]:checked');
+  return selected?.value === "include";
+}
+
+function shouldShowStatementDirectCollectionOption() {
+  return selectedSettlementCustomer !== "all";
+}
+
+function updateStatementDirectCollectionOptionVisibility() {
+  const panel = document.getElementById("statementDirectCollectionOptionPanel");
+  if (!panel) return;
+  panel.classList.toggle("hidden", !shouldShowStatementDirectCollectionOption());
+}
+
+function setStatementDirectCollectionOption(includeDirectCollection) {
+  const targetValue = includeDirectCollection ? "include" : "exclude";
+  const target = document.querySelector(`input[name="statementDirectCollectionOption"][value="${targetValue}"]`);
+  if (target) target.checked = true;
+}
+
+function filterSettlementStatementJobs(jobs, includeDirectCollection) {
+  if (includeDirectCollection) return jobs.slice();
+  return jobs.filter((job) => !(job.jobType === "내 장비 작업" && String(job.receivableStatus || "").trim() === DIRECT_COLLECTION_STATUS));
+}
+
+function buildSettlementStatementReportData(includeDirectCollection) {
+  const baseReport = buildSettlementReportData();
+  if (!baseReport?.filters || baseReport.filters.customerId === "all") {
+    return {
+      ...baseReport,
+      jobs: (baseReport.jobs || []).slice()
+    };
+  }
+
+  return {
+    ...baseReport,
+    jobs: filterSettlementStatementJobs(baseReport.jobs || [], includeDirectCollection)
+  };
 }
 
 function buildSettlementStatementHtml(report) {
@@ -1968,6 +2012,7 @@ function buildSettlementStatementHtml(report) {
 
         <div class="statement-subtotal-box">
           <div class="statement-subtotal-title">${escapeHtml(subtotalLabel)}</div>
+          <div><span>작업건수</span><strong>${jobs.length}건</strong></div>
           <div><span>공급가액</span><strong>${escapeHtml(formatCurrency(totals.supply))}</strong></div>
           <div><span>부가세</span><strong>${escapeHtml(formatCurrency(totals.vat))}</strong></div>
           <div><span>합계금액</span><strong>${escapeHtml(formatCurrency(totals.total))}</strong></div>
@@ -2020,6 +2065,7 @@ function buildSettlementStatementHtml(report) {
 
           <footer class="statement-total-box">
             <div class="statement-total-title">■ 정산 합계</div>
+            <div><span>총 작업건수</span><strong>${sortedJobs.length}건</strong></div>
             <div><span>순 공급가액</span><strong>${escapeHtml(formatCurrency(settlementNetSupply))}</strong></div>
             <div><span>부가세</span><strong>${escapeHtml(formatCurrency(settlementVat))}</strong></div>
             <div><span>최종 합계</span><strong>${escapeHtml(formatCurrency(settlementFinalTotal))}</strong></div>
@@ -2050,11 +2096,15 @@ function updateSettlementStatementPreviewScale() {
 function refreshSettlementStatementIfOpen() {
   const modal = document.getElementById("settlementStatementModal");
   if (!modal || modal.classList.contains("hidden")) return;
-  if (!currentSettlementReport || !Array.isArray(currentSettlementReport.jobs) || currentSettlementReport.jobs.length === 0) {
+  const baseReport = buildSettlementReportData();
+  if (!baseReport || !Array.isArray(baseReport.jobs) || baseReport.jobs.length === 0) {
     closeSettlementStatement();
     return;
   }
 
+  const showOption = shouldShowStatementDirectCollectionOption();
+  includeDirectCollectionInStatement = showOption ? getStatementDirectCollectionOption() : true;
+  currentSettlementReport = buildSettlementStatementReportData(includeDirectCollectionInStatement);
   document.getElementById("settlementStatementContent").innerHTML = buildSettlementStatementHtml(currentSettlementReport);
   updateSettlementStatementPreviewScale();
 }
@@ -2191,7 +2241,9 @@ async function createSettlementPdfDocument(report) {
 }
 
 async function downloadSettlementPdf() {
-  currentSettlementReport = buildSettlementReportData();
+  const showOption = shouldShowStatementDirectCollectionOption();
+  includeDirectCollectionInStatement = showOption ? getStatementDirectCollectionOption() : true;
+  currentSettlementReport = buildSettlementStatementReportData(includeDirectCollectionInStatement);
 
   if (!currentSettlementReport || currentSettlementReport.jobs.length === 0) {
     showToast("선택한 조건의 작업이 없어 저장할 수 없습니다.");
@@ -2209,12 +2261,20 @@ async function downloadSettlementPdf() {
 }
 
 function openSettlementStatement() {
-  currentSettlementReport = buildSettlementReportData();
+  const baseReport = buildSettlementReportData();
 
-  if (!currentSettlementReport || currentSettlementReport.jobs.length === 0) {
+  if (!baseReport || baseReport.jobs.length === 0) {
     showToast("선택한 조건의 작업이 없어 출력할 수 없습니다.");
     return;
   }
+
+  const showOption = shouldShowStatementDirectCollectionOption();
+  includeDirectCollectionInStatement = showOption ? false : true;
+  if (showOption) {
+    setStatementDirectCollectionOption(false);
+  }
+  updateStatementDirectCollectionOptionVisibility();
+  currentSettlementReport = buildSettlementStatementReportData(includeDirectCollectionInStatement);
 
   const content = buildSettlementStatementHtml(currentSettlementReport);
   document.getElementById("settlementStatementContent").innerHTML = content;
@@ -3116,6 +3176,7 @@ async function importBackup(event) {
 function renderAll() {
   buildDatalists();
   buildCustomerSelectOptions();
+  updateStatementDirectCollectionOptionVisibility();
   renderDashboard();
   renderCalendarView();
   renderJobList();
@@ -3182,6 +3243,12 @@ function initializeApp() {
   document.getElementById("closeReportBtn").addEventListener("click", closeSettlementStatement);
   document.getElementById("savePdfBtn").addEventListener("click", downloadSettlementPdf);
   document.getElementById("printReportBtn").addEventListener("click", printSettlementStatement);
+  document.querySelectorAll('input[name="statementDirectCollectionOption"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      includeDirectCollectionInStatement = getStatementDirectCollectionOption();
+      refreshSettlementStatementIfOpen();
+    });
+  });
   document.getElementById("settlementStatementModal").addEventListener("click", (event) => {
     if (event.target.id === "settlementStatementModal") closeSettlementStatement();
   });
@@ -3251,6 +3318,7 @@ function initializeApp() {
     customerSelect.addEventListener("change", () => {
       selectedSettlementCustomer = customerSelect.value || "all";
       renderSettlementView();
+      refreshSettlementStatementIfOpen();
     });
   }
 
