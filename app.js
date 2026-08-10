@@ -1,6 +1,6 @@
 ﻿const STORAGE_KEY = "jeilcrane-pro-db-v2";
 const DAILY_FINISH_POPUP_KEY = "jeilcrane-pro-daily-finish-popup-date";
-const DIRECT_COLLECTION_STATUS = "직접수금";
+const LEGACY_DIRECT_COLLECTION_STATUS = "직접수금";
 const EXPENSE_CATEGORIES = ["주유", "장비수리", "소모품", "식비", "보험", "기타"];
 let selectedCustomerId = null;
 let selectedCalendarDate = null;
@@ -130,17 +130,31 @@ function normalizeCustomers(customers, jobs) {
   return normalized;
 }
 
+function normalizeReceivableStatus(rawStatus) {
+  const status = String(rawStatus || "").trim();
+  if (status === "수금완료" || status === "미수") return status;
+  if (status === LEGACY_DIRECT_COLLECTION_STATUS) return "수금완료";
+  return "미수";
+}
+
+function normalizeJob(job) {
+  const rawReceivableStatus = String(job?.receivableStatus || job?.collectionStatus || job?.receivable || "").trim();
+
+  return {
+    ...job,
+    status: job?.status || "진행중",
+    receivableStatus: normalizeReceivableStatus(rawReceivableStatus),
+    directCollection: typeof job?.directCollection === "boolean" ? job.directCollection : false,
+    invoiceIssued: job?.invoiceIssued || "미발행",
+    payoutStatus: job?.payoutStatus || "미지급",
+    workTime: job?.workTime || ""
+  };
+}
+
 function normalizeState(source) {
   const base = source || {};
   const jobs = Array.isArray(base.jobs)
-    ? base.jobs.map((job) => ({
-        ...job,
-        status: job.status || "진행중",
-        receivableStatus: job.receivableStatus || "미수",
-        invoiceIssued: job.invoiceIssued || "미발행",
-        payoutStatus: job.payoutStatus || "미지급",
-        workTime: job.workTime || ""
-      }))
+    ? base.jobs.map(normalizeJob)
     : [];
 
   return {
@@ -603,8 +617,10 @@ function setJobFormMode(isEditMode) {
 
 function resetJobFormToCreateMode() {
   const form = document.getElementById("jobForm");
+  const directCollectionField = document.getElementById("directCollection");
   editingJobId = null;
   if (form) form.reset();
+  if (directCollectionField) directCollectionField.checked = false;
   setTodayDefaults();
   toggleJobTypeFields();
   setJobFormMode(false);
@@ -630,6 +646,7 @@ function startJobEdit(job) {
   document.getElementById("jobMemo").value = job.memo || "";
   document.getElementById("salesAmount").value = Number(job.salesAmount || 0) || "";
   document.getElementById("receivableStatus").value = job.receivableStatus || "미수";
+  document.getElementById("directCollection").checked = Boolean(job.directCollection);
   document.getElementById("invoiceIssued").value = job.invoiceIssued || "미발행";
   document.getElementById("payoutAmount").value = Number(job.payoutAmount || 0) || "";
   document.getElementById("payoutStatus").value = job.payoutStatus || "미지급";
@@ -694,12 +711,14 @@ function bindForm() {
       record.providerName = existingJob ? (existingJob.providerName || "") : "";
       record.payoutAmount = Number(document.getElementById("payoutAmount").value || 0);
       record.payoutStatus = document.getElementById("payoutStatus").value;
+      record.directCollection = false;
       delete record.salesAmount;
       delete record.receivableStatus;
       delete record.invoiceIssued;
     } else {
       record.salesAmount = Number(document.getElementById("salesAmount").value || 0);
       record.receivableStatus = document.getElementById("receivableStatus").value;
+      record.directCollection = Boolean(document.getElementById("directCollection")?.checked);
       record.invoiceIssued = document.getElementById("invoiceIssued").value;
       delete record.providerName;
       delete record.payoutAmount;
@@ -1878,7 +1897,7 @@ function setStatementDirectCollectionOption(includeDirectCollection) {
 
 function filterSettlementStatementJobs(jobs, includeDirectCollection) {
   if (includeDirectCollection) return jobs.slice();
-  return jobs.filter((job) => !(job.jobType === "내 장비 작업" && String(job.receivableStatus || "").trim() === DIRECT_COLLECTION_STATUS));
+  return jobs.filter((job) => !(job.jobType === "내 장비 작업" && Boolean(job.directCollection)));
 }
 
 function buildSettlementStatementReportData(includeDirectCollection) {
@@ -3051,14 +3070,7 @@ async function readBackupFileText(file) {
 }
 
 function normalizeImportedJobs(jobs) {
-  return jobs.map((job) => ({
-    ...job,
-    status: job.status || "진행중",
-    receivableStatus: job.receivableStatus || "미수",
-    invoiceIssued: job.invoiceIssued || "미발행",
-    payoutStatus: job.payoutStatus || "미지급",
-    workTime: job.workTime || ""
-  }));
+  return jobs.map(normalizeJob);
 }
 
 function applyBackupData(imported) {
