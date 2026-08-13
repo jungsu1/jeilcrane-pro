@@ -137,47 +137,24 @@ function normalizeReceivableStatus(rawStatus) {
   return "미수";
 }
 
-function normalizeJob(job, customerLookup = []) {
+function normalizeJob(job) {
   const rawReceivableStatus = String(job?.receivableStatus || job?.collectionStatus || job?.receivable || "").trim();
-  const normalizedJob = {
+
+  return {
     ...job,
     status: job?.status || "진행중",
     receivableStatus: normalizeReceivableStatus(rawReceivableStatus),
     directCollection: typeof job?.directCollection === "boolean" ? job.directCollection : false,
     invoiceIssued: job?.invoiceIssued || "미발행",
     payoutStatus: job?.payoutStatus || "미지급",
-    workTime: job?.workTime || "",
-    sourceType: job?.sourceType || (job?.customerId ? "거래처배차" : "직접배차"),
-    customerId: job?.customerId || "",
-    customerName: job?.customerName || "",
-    dispatchCustomerId: job?.dispatchCustomerId || job?.providerId || "",
-    dispatchCustomerName: job?.dispatchCustomerName || job?.providerName || "",
-    receivableAmount: Number(job?.receivableAmount ?? job?.salesAmount ?? 0),
-    payoutAmount: Number(job?.payoutAmount ?? 0)
+    workTime: job?.workTime || ""
   };
-
-  if (normalizedJob.jobType === "배차 작업" && !normalizedJob.customerId && normalizedJob.sourceType === "직접배차") {
-    normalizedJob.customerId = "";
-  }
-
-  if (!normalizedJob.customerName && normalizedJob.customerId) {
-    const matchedCustomer = customerLookup.find((customer) => customer.id === normalizedJob.customerId);
-    normalizedJob.customerName = matchedCustomer?.name || normalizedJob.customerName || "";
-  }
-
-  if (!normalizedJob.dispatchCustomerName && normalizedJob.dispatchCustomerId) {
-    const matchedCustomer = customerLookup.find((customer) => customer.id === normalizedJob.dispatchCustomerId);
-    normalizedJob.dispatchCustomerName = matchedCustomer?.name || normalizedJob.dispatchCustomerName || "";
-  }
-
-  return normalizedJob;
 }
 
 function normalizeState(source) {
   const base = source || {};
-  const customerLookup = Array.isArray(base.customers) ? base.customers : [];
   const jobs = Array.isArray(base.jobs)
-    ? base.jobs.map((job) => normalizeJob(job, customerLookup))
+    ? base.jobs.map(normalizeJob)
     : [];
 
   return {
@@ -622,11 +599,9 @@ function toggleJobTypeFields() {
   if (type === "배차 작업") {
     equipment.classList.add("hidden");
     dispatch.classList.remove("hidden");
-    buildCustomerSelectOptions(true);
   } else {
     equipment.classList.remove("hidden");
     dispatch.classList.add("hidden");
-    buildCustomerSelectOptions(false);
   }
 }
 
@@ -654,7 +629,6 @@ function resetJobFormToCreateMode() {
 function startJobEdit(job) {
   if (!job) return;
   const customerSelect = document.getElementById("jobCustomer");
-  const dispatchCustomerSelect = document.getElementById("dispatchCustomer");
   const matchedCustomerByName = state.customers.find((customer) => customer.name === job.customerName);
   const customerId = state.customers.some((customer) => customer.id === job.customerId)
     ? job.customerId
@@ -667,31 +641,15 @@ function startJobEdit(job) {
   document.getElementById("jobSite").value = job.siteName || "";
   document.getElementById("jobWork").value = job.workContent || "";
   document.getElementById("jobWorkTime").value = job.workTime || "";
-  if (customerSelect) {
-    customerSelect.value = job.sourceType === "직접배차" || !customerId ? "direct-dispatch" : customerId;
-  }
-  if (dispatchCustomerSelect) {
-    const dispatchCustomerId = state.customers.some((customer) => customer.id === job.dispatchCustomerId)
-      ? job.dispatchCustomerId
-      : (state.customers.find((customer) => customer.name === (job.dispatchCustomerName || job.providerName))?.id || "");
-    dispatchCustomerSelect.value = dispatchCustomerId || "";
-  }
+  if (customerSelect) customerSelect.value = customerId;
   document.getElementById("jobType").value = job.jobType || "내 장비 작업";
   document.getElementById("jobMemo").value = job.memo || "";
   document.getElementById("salesAmount").value = Number(job.salesAmount || 0) || "";
   document.getElementById("receivableStatus").value = job.receivableStatus || "미수";
-  const dispatchReceivableStatusField = document.getElementById("dispatchReceivableStatus");
-  if (dispatchReceivableStatusField) {
-    dispatchReceivableStatusField.value = job.receivableStatus || "미수";
-  }
   document.getElementById("directCollection").checked = Boolean(job.directCollection);
   document.getElementById("invoiceIssued").value = job.invoiceIssued || "미발행";
-  document.getElementById("receivableAmount").value = Number(job.receivableAmount ?? job.salesAmount ?? 0) || "";
   document.getElementById("payoutAmount").value = Number(job.payoutAmount || 0) || "";
-  const dispatchPayoutStatusField = document.getElementById("dispatchPayoutStatus");
-  if (dispatchPayoutStatusField) {
-    dispatchPayoutStatusField.value = job.payoutStatus || "미지급";
-  }
+  document.getElementById("payoutStatus").value = job.payoutStatus || "미지급";
 
   toggleJobTypeFields();
   setJobFormMode(true);
@@ -719,19 +677,9 @@ function bindForm() {
     }
 
     const customerSelect = document.getElementById("jobCustomer");
-    const dispatchCustomerSelect = document.getElementById("dispatchCustomer");
-    const sourceSelectionValue = customerSelect?.value || "";
-    const isDirectDispatch = sourceSelectionValue === "direct-dispatch";
-    const customerId = isDirectDispatch ? "" : sourceSelectionValue;
-    const dispatchCustomerId = dispatchCustomerSelect?.value || "";
-
-    if (!isDirectDispatch && !customerId) {
-      showToast("일 준 거래처를 선택해주세요.");
-      return;
-    }
-
-    if (document.getElementById("jobType").value === "배차 작업" && !dispatchCustomerId) {
-      showToast("배차장비를 선택해주세요.");
+    const customerId = customerSelect.value;
+    if (!customerId) {
+      showToast("거래처를 선택해주세요.");
       return;
     }
 
@@ -744,7 +692,6 @@ function bindForm() {
     }
 
     const selectedCustomer = state.customers.find((customer) => customer.id === customerId);
-    const selectedDispatchCustomer = state.customers.find((customer) => customer.id === dispatchCustomerId);
     const jobType = document.getElementById("jobType").value;
     const record = {
       id: existingJob ? existingJob.id : createId("job"),
@@ -754,7 +701,6 @@ function bindForm() {
       workTime: document.getElementById("jobWorkTime").value.trim(),
       customerName: selectedCustomer ? selectedCustomer.name : "",
       customerId: selectedCustomer ? selectedCustomer.id : "",
-      sourceType: isDirectDispatch ? "직접배차" : "거래처배차",
       jobType,
       memo: document.getElementById("jobMemo").value.trim(),
       status: existingJob ? (existingJob.status || "진행중") : "진행중",
@@ -762,29 +708,21 @@ function bindForm() {
     };
 
     if (jobType === "배차 작업") {
-      record.dispatchCustomerId = selectedDispatchCustomer ? selectedDispatchCustomer.id : "";
-      record.dispatchCustomerName = selectedDispatchCustomer ? selectedDispatchCustomer.name : "";
-      record.receivableAmount = Number(document.getElementById("receivableAmount").value || 0);
-      record.receivableStatus = document.getElementById("dispatchReceivableStatus")?.value || "미수";
+      record.providerName = existingJob ? (existingJob.providerName || "") : "";
       record.payoutAmount = Number(document.getElementById("payoutAmount").value || 0);
-      record.payoutStatus = document.getElementById("dispatchPayoutStatus")?.value || "미지급";
+      record.payoutStatus = document.getElementById("payoutStatus").value;
       record.directCollection = false;
-      record.providerName = record.dispatchCustomerName || (existingJob ? (existingJob.providerName || "") : "");
-      record.salesAmount = Number(record.receivableAmount || 0);
-      record.invoiceIssued = document.getElementById("invoiceIssued")?.value || "미발행";
-      delete record.providerId;
+      delete record.salesAmount;
+      delete record.receivableStatus;
+      delete record.invoiceIssued;
     } else {
       record.salesAmount = Number(document.getElementById("salesAmount").value || 0);
       record.receivableStatus = document.getElementById("receivableStatus").value;
       record.directCollection = Boolean(document.getElementById("directCollection")?.checked);
       record.invoiceIssued = document.getElementById("invoiceIssued").value;
-      delete record.dispatchCustomerId;
-      delete record.dispatchCustomerName;
       delete record.providerName;
-      delete record.receivableAmount;
       delete record.payoutAmount;
       delete record.payoutStatus;
-      delete record.sourceType;
     }
 
     if (existingJob) {
@@ -815,46 +753,14 @@ function buildDatalists() {
   }
 }
 
-function buildCustomerSelectOptions(allowDirectDispatch = false) {
+function buildCustomerSelectOptions() {
   const select = document.getElementById("jobCustomer");
   if (!select) return;
   const previousValue = select.value;
   const options = state.customers
     .map((customer) => `<option value="${escapeHtml(customer.id)}" ${previousValue === customer.id ? "selected" : ""}>${escapeHtml(customer.name)}</option>`)
     .join("");
-
-  if (allowDirectDispatch) {
-    select.innerHTML = `<option value="direct-dispatch">직접배차</option>${options}`;
-    if (!state.customers.length) {
-      select.innerHTML = `<option value="direct-dispatch">직접배차</option><option value="">등록된 거래처 없음</option>`;
-    }
-    if (previousValue === "direct-dispatch" || !previousValue) {
-      select.value = "direct-dispatch";
-    } else if (state.customers.some((customer) => customer.id === previousValue)) {
-      select.value = previousValue;
-    }
-    return;
-  }
-
   select.innerHTML = `<option value="">거래처 선택</option>${options}`;
-  if (!state.customers.length) {
-    select.innerHTML = `<option value="">등록된 거래처 없음</option>`;
-  }
-  if (previousValue && state.customers.some((customer) => customer.id === previousValue)) {
-    select.value = previousValue;
-  } else {
-    select.value = "";
-  }
-}
-
-function buildDispatchCustomerSelectOptions() {
-  const select = document.getElementById("dispatchCustomer");
-  if (!select) return;
-  const previousValue = select.value;
-  const options = state.customers
-    .map((customer) => `<option value="${escapeHtml(customer.id)}" ${previousValue === customer.id ? "selected" : ""}>${escapeHtml(customer.name)}</option>`)
-    .join("");
-  select.innerHTML = `<option value="">배차장비 선택</option>${options}`;
   if (!state.customers.length) {
     select.innerHTML = `<option value="">등록된 거래처 없음</option>`;
   }
@@ -1234,55 +1140,6 @@ function getJobCustomerName(job) {
   ).trim();
 }
 
-function getJobSourceCustomerId(job) {
-  if (!job) return "";
-  if (job.sourceType === "직접배차" || job.customerId === "direct-dispatch") return "";
-  return String(job.customerId || "").trim();
-}
-
-function getJobDispatchCustomerId(job) {
-  if (!job) return "";
-  return String(job.dispatchCustomerId || job.providerId || "").trim();
-}
-
-function getJobSourceCustomerName(job) {
-  if (!job) return "";
-  if (job.sourceType === "직접배차" || job.customerId === "direct-dispatch") return "직접배차";
-  return String(job.customerName || getJobCustomerName(job) || "").trim();
-}
-
-function getJobDispatchCustomerName(job) {
-  if (!job) return "";
-  return String(job.dispatchCustomerName || job.providerName || "").trim();
-}
-
-function getJobReceivableAmount(job) {
-  if (!job) return 0;
-  if (job.jobType === "내 장비 작업") return Number(job.salesAmount || 0);
-  return Number(job.receivableAmount ?? job.salesAmount ?? 0);
-}
-
-function getJobPayoutAmount(job) {
-  if (!job) return 0;
-  return Number(job.payoutAmount || 0);
-}
-
-function getJobRoleAwareAmount(job, selectedCustomerId) {
-  if (!job) return 0;
-  if (job.jobType === "내 장비 작업") return Number(job.salesAmount || 0);
-  const sourceMatches = getJobSourceCustomerId(job) && getJobSourceCustomerId(job) === selectedCustomerId;
-  const dispatchMatches = getJobDispatchCustomerId(job) && getJobDispatchCustomerId(job) === selectedCustomerId;
-  if (sourceMatches) return getJobReceivableAmount(job);
-  if (dispatchMatches) return getJobPayoutAmount(job);
-  return getJobReceivableAmount(job);
-}
-
-function getJobRoleAwareDisplayName(job) {
-  if (!job) return "";
-  if (job.jobType === "내 장비 작업") return getJobCustomerName(job) || "미입력";
-  return getJobDispatchCustomerName(job) || getJobSourceCustomerName(job) || "미입력";
-}
-
 function updateSettlementPeriodUI() {
   document.querySelectorAll("[data-period]").forEach((button) => {
     button.classList.toggle("active", button.dataset.period === selectedSettlementPeriod);
@@ -1356,24 +1213,8 @@ function getExpenseFilterRange() {
   };
 }
 
-function getSettlementJobAmount(job, customerId = selectedSettlementCustomer) {
-  if (!job) return 0;
-  if (job.jobType === "내 장비 작업") return Number(job.salesAmount || 0);
-  if (customerId && customerId !== "all") {
-    if (getJobSourceCustomerId(job) === customerId) return Number(job.receivableAmount ?? job.salesAmount ?? 0);
-    if (getJobDispatchCustomerId(job) === customerId) return Number(job.payoutAmount || 0);
-  }
-  return Number(job.payoutAmount || 0);
-}
-
-function getSettlementReceivableAmount(job, customerId = selectedSettlementCustomer) {
-  if (!job) return 0;
-  if (job.jobType === "내 장비 작업") return Number(job.salesAmount || 0);
-  if (customerId && customerId !== "all") {
-    if (getJobSourceCustomerId(job) === customerId) return Number(job.receivableAmount ?? job.salesAmount ?? 0);
-    if (getJobDispatchCustomerId(job) === customerId) return 0;
-  }
-  return Number(job.receivableAmount ?? job.salesAmount ?? 0);
+function getSettlementJobAmount(job) {
+  return job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
 }
 
 function getSettlementCollectionStatus(job) {
@@ -1394,16 +1235,6 @@ function getSettlementCollectionStatus(job) {
     || job.payoutStatus
     || "미수"
   ).trim();
-}
-
-function getSettlementPayableStatus(job) {
-  if (!job || job.jobType !== "배차 작업") return "";
-  return String(job.payoutStatus || "미지급").trim();
-}
-
-function getSettlementReceivableStatus(job) {
-  if (!job || job.jobType !== "배차 작업") return String(job.receivableStatus || "미수").trim();
-  return String(job.receivableStatus || "미수").trim();
 }
 
 function isOutstandingReceivableJob(job) {
@@ -1548,7 +1379,7 @@ function buildSettlementPayableDetailHtml(report) {
   if (!jobs.length) return buildSettlementNoDataHtml();
 
   const grouped = jobs.reduce((map, job) => {
-    const key = String(getJobDispatchCustomerName(job) || job.providerName || getJobCustomerName(job) || "미입력").trim() || "미입력";
+    const key = String(job.providerName || getJobCustomerName(job) || "미입력").trim() || "미입력";
     if (!map[key]) map[key] = [];
     map[key].push(job);
     return map;
@@ -1765,18 +1596,10 @@ function buildSettlementReportData() {
     : String(selectedCustomer?.name || "").trim();
   const isAllCustomers = selectedSettlementCustomer === "all";
 
-  const matchesCustomerName = (job, targetCustomerName) => {
-    if (!targetCustomerName) return false;
-    return getJobSourceCustomerName(job) === targetCustomerName || getJobDispatchCustomerName(job) === targetCustomerName || getJobCustomerName(job) === targetCustomerName;
-  };
-
   const isSelectedCustomerJob = (job) => {
     if (isAllCustomers) return true;
-    const sourceMatches = getJobSourceCustomerId(job) === selectedSettlementCustomer;
-    const dispatchMatches = getJobDispatchCustomerId(job) === selectedSettlementCustomer;
-    if (sourceMatches || dispatchMatches) return true;
-    if (job.customerId && job.customerId === selectedSettlementCustomer) return true;
-    return matchesCustomerName(job, customerName);
+    if (job.customerId) return job.customerId === selectedSettlementCustomer;
+    return getJobCustomerName(job) === customerName;
   };
 
   const filteredJobs = state.jobs.filter((job) => {
@@ -1786,76 +1609,38 @@ function buildSettlementReportData() {
 
   const filteredExpenses = state.expenses.filter((expense) => isDateInRange(expense.date, range));
   const equipmentJobs = filteredJobs.filter((job) => job.jobType === "내 장비 작업");
-  const dispatchJobs = filteredJobs.filter((job) => job.jobType === "배차 작업");
-  const unpaidDispatchJobs = dispatchJobs.filter(
-    (job) => String(job.payoutStatus || "") === "미지급"
+  const unpaidDispatchJobs = filteredJobs.filter(
+    (job) => job.jobType === "배차 작업" && String(job.payoutStatus || "") === "미지급"
   );
   const completedReceivables = equipmentJobs.filter((job) => job.receivableStatus === "수금완료");
   const outstandingReceivables = equipmentJobs.filter((job) => job.receivableStatus === "미수");
-  const completedDispatchReceivables = dispatchJobs.filter((job) => String(job.receivableStatus || "") === "수금완료");
-  const outstandingDispatchReceivables = dispatchJobs.filter((job) => String(job.receivableStatus || "") === "미수");
-
-  const getRoleAwareDispatchAmount = (job) => {
-    if (isAllCustomers) return getJobReceivableAmount(job);
-    if (getJobSourceCustomerId(job) === selectedSettlementCustomer) return getJobReceivableAmount(job);
-    if (getJobDispatchCustomerId(job) === selectedSettlementCustomer) return getJobPayoutAmount(job);
-    return getJobReceivableAmount(job);
-  };
-
-  const dispatchReceivableForSelectedCustomer = (job) => {
-    if (isAllCustomers) return getJobReceivableAmount(job);
-    if (getJobSourceCustomerId(job) === selectedSettlementCustomer) return getJobReceivableAmount(job);
-    return 0;
-  };
 
   const summary = {
     jobCount: filteredJobs.length,
-    totalSales: equipmentJobs.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0)
-      + dispatchJobs.reduce((sum, job) => sum + getRoleAwareDispatchAmount(job), 0),
-    completedReceivable: completedReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0)
-      + completedDispatchReceivables.reduce((sum, job) => sum + dispatchReceivableForSelectedCustomer(job), 0),
-    outstandingReceivable: outstandingReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0)
-      + outstandingDispatchReceivables.reduce((sum, job) => sum + dispatchReceivableForSelectedCustomer(job), 0),
+    totalSales: equipmentJobs.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
+    completedReceivable: completedReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
+    outstandingReceivable: outstandingReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
     totalExpenses: filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
-    outstandingPayable: unpaidDispatchJobs.reduce((sum, job) => sum + (
-      getJobDispatchCustomerId(job) === selectedSettlementCustomer || isAllCustomers ? getJobPayoutAmount(job) : 0
-    ), 0),
+    outstandingPayable: unpaidDispatchJobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0),
     netProfit: 0
   };
   summary.netProfit = summary.totalSales - summary.totalExpenses;
 
   const customerMap = new Map();
   filteredJobs.forEach((job) => {
-    if (job.jobType === "내 장비 작업") {
-      const name = getJobCustomerName(job) || "미입력";
-      const key = `${job.jobType}:${name}`;
-      if (!customerMap.has(key)) {
-        customerMap.set(key, { name, totalAmount: 0, count: 0 });
-      }
-      const entry = customerMap.get(key);
-      entry.totalAmount += Number(job.salesAmount || 0);
-      entry.count += 1;
-      return;
+    const name = getJobCustomerName(job) || "미입력";
+    if (!name) return;
+    const key = `${job.jobType}:${name}`;
+    if (!customerMap.has(key)) {
+      customerMap.set(key, {
+        name,
+        totalAmount: 0,
+        count: 0
+      });
     }
-
-    const sourceName = getJobSourceCustomerName(job) || "직접배차";
-    const sourceKey = `${job.jobType}:source:${sourceName}`;
-    if (!customerMap.has(sourceKey)) {
-      customerMap.set(sourceKey, { name: sourceName, totalAmount: 0, count: 0 });
-    }
-    const sourceEntry = customerMap.get(sourceKey);
-    sourceEntry.totalAmount += getJobReceivableAmount(job);
-    sourceEntry.count += 1;
-
-    const dispatchName = getJobDispatchCustomerName(job) || "미입력";
-    if (!dispatchName) return;
-    const dispatchKey = `${job.jobType}:dispatch:${dispatchName}`;
-    if (!customerMap.has(dispatchKey)) {
-      customerMap.set(dispatchKey, { name: dispatchName, totalAmount: 0, count: 0 });
-    }
-    const dispatchEntry = customerMap.get(dispatchKey);
-    dispatchEntry.totalAmount += getJobPayoutAmount(job);
-    dispatchEntry.count += 1;
+    const entry = customerMap.get(key);
+    entry.totalAmount += job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+    entry.count += 1;
   });
 
   return {
@@ -2181,26 +1966,10 @@ function buildSettlementStatementHtml(report) {
     `;
   }
 
-  const selectedCustomerId = selectedCustomer?.id || "";
-  const roleAwareJobs = sortedJobs.filter((job) => {
-    if (job.jobType === "내 장비 작업") return true;
-    if (!selectedCustomerId) return false;
-    const sourceMatches = getJobSourceCustomerId(job) === selectedCustomerId;
-    const dispatchMatches = getJobDispatchCustomerId(job) === selectedCustomerId;
-    return sourceMatches || dispatchMatches;
-  });
-  const equipmentJobs = roleAwareJobs.filter((job) => job.jobType === "내 장비 작업");
-  const dispatchJobs = roleAwareJobs.filter((job) => job.jobType === "배차 작업");
+  const equipmentJobs = sortedJobs.filter((job) => job.jobType === "내 장비 작업");
+  const dispatchJobs = sortedJobs.filter((job) => job.jobType === "배차 작업");
 
-  const getSupplyAmount = (job) => {
-    if (job.jobType === "내 장비 작업") return Number(job.salesAmount || 0);
-    if (!selectedCustomerId) return Number(job.payoutAmount || 0);
-    const sourceMatches = getJobSourceCustomerId(job) === selectedCustomerId;
-    const dispatchMatches = getJobDispatchCustomerId(job) === selectedCustomerId;
-    if (sourceMatches) return getJobReceivableAmount(job);
-    if (dispatchMatches) return getJobPayoutAmount(job);
-    return 0;
-  };
+  const getSupplyAmount = (job) => (job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0));
   const getVatAmount = (supplyAmount) => Math.round(supplyAmount * 0.1);
 
   const getSectionTotals = (jobs) => jobs.reduce((acc, job) => {
@@ -2277,7 +2046,7 @@ function buildSettlementStatementHtml(report) {
     buildSectionHtml("내 장비 작업", equipmentJobs, "내 장비 소계"),
     buildSectionHtml("배차 작업", dispatchJobs, "배차 소계")
   ].join("");
-  const settlementNetSupply = equipmentTotals.supply + dispatchTotals.supply;
+  const settlementNetSupply = equipmentTotals.supply - dispatchTotals.supply;
   const settlementVat = Math.round(settlementNetSupply * 0.1);
   const settlementFinalTotal = settlementNetSupply + settlementVat;
 
@@ -2315,7 +2084,7 @@ function buildSettlementStatementHtml(report) {
 
           <footer class="statement-total-box">
             <div class="statement-total-title">■ 정산 합계</div>
-            <div><span>총 작업건수</span><strong>${roleAwareJobs.length}건</strong></div>
+            <div><span>총 작업건수</span><strong>${sortedJobs.length}건</strong></div>
             <div><span>순 공급가액</span><strong>${escapeHtml(formatCurrency(settlementNetSupply))}</strong></div>
             <div><span>부가세</span><strong>${escapeHtml(formatCurrency(settlementVat))}</strong></div>
             <div><span>최종 합계</span><strong>${escapeHtml(formatCurrency(settlementFinalTotal))}</strong></div>
@@ -3419,7 +3188,6 @@ async function importBackup(event) {
 function renderAll() {
   buildDatalists();
   buildCustomerSelectOptions();
-  buildDispatchCustomerSelectOptions();
   updateStatementDirectCollectionOptionVisibility();
   renderDashboard();
   renderCalendarView();
