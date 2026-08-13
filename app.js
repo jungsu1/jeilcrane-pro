@@ -1,4 +1,5 @@
 ﻿const STORAGE_KEY = "jeilcrane-pro-db-v2";
+const THEME_STORAGE_KEY = "jeilcrane-pro-theme";
 const LEGACY_DIRECT_COLLECTION_STATUS = "직접수금";
 const EXPENSE_CATEGORIES = ["주유", "장비수리", "소모품", "식비", "보험", "기타"];
 let selectedCustomerId = null;
@@ -246,6 +247,30 @@ function showToast(message) {
   toast.classList.add("show");
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => toast.classList.remove("show"), 1800);
+}
+
+function getStoredTheme() {
+  try {
+    const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    return storedTheme === "light" ? "light" : "dark";
+  } catch (error) {
+    return "dark";
+  }
+}
+
+function applyTheme(theme) {
+  const normalizedTheme = theme === "light" ? "light" : "dark";
+  document.body.dataset.theme = normalizedTheme;
+
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, normalizedTheme);
+  } catch (error) {
+    console.warn("테마 저장 실패", error);
+  }
+
+  document.querySelectorAll('input[name="appTheme"]').forEach((input) => {
+    input.checked = input.value === normalizedTheme;
+  });
 }
 
 function formatDateKey(date) {
@@ -3315,6 +3340,15 @@ function initializeApp() {
   if (endMonthInput && !endMonthInput.value) {
     endMonthInput.value = getCurrentMonth();
   }
+  document.querySelectorAll('input[name="appTheme"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked) {
+        applyTheme(input.value);
+      }
+    });
+  });
+
+  applyTheme(getStoredTheme());
   setTodayDefaults();
   toggleJobTypeFields();
   resetExpenseFormToCreateMode();
