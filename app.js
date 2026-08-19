@@ -147,8 +147,30 @@ function normalizeJob(job) {
     directCollection: typeof job?.directCollection === "boolean" ? job.directCollection : false,
     invoiceIssued: job?.invoiceIssued || "미발행",
     payoutStatus: job?.payoutStatus || "미지급",
+    providerCustomerId: job?.providerCustomerId || "",
+    providerCustomerName: job?.providerCustomerName || job?.providerName || "",
     workTime: job?.workTime || ""
   };
+}
+
+function isEquipmentJob(job) {
+  return job?.jobType === "내 장비 작업";
+}
+
+function isLinkedDispatchJob(job) {
+  return job?.jobType === "연결 배차";
+}
+
+function hasReceivable(job) {
+  return isEquipmentJob(job) || isLinkedDispatchJob(job);
+}
+
+function hasPayout(job) {
+  return job?.jobType === "배차 작업" || isLinkedDispatchJob(job);
+}
+
+function getProviderCustomerName(job) {
+  return String(job?.providerCustomerName || job?.providerName || "").trim();
 }
 
 function normalizeState(source) {
@@ -595,13 +617,13 @@ function toggleJobTypeFields() {
   const type = document.getElementById("jobType").value;
   const equipment = document.getElementById("equipmentFields");
   const dispatch = document.getElementById("dispatchFields");
-  if (type === "배차 작업") {
-    equipment.classList.add("hidden");
-    dispatch.classList.remove("hidden");
-  } else {
-    equipment.classList.remove("hidden");
-    dispatch.classList.add("hidden");
-  }
+  const providerGroup = document.getElementById("linkedDispatchProviderGroup");
+  const directCollectionGroup = document.querySelector(".direct-collection-check");
+  const isLinked = type === "연결 배차";
+  equipment.classList.toggle("hidden", type === "배차 작업");
+  dispatch.classList.toggle("hidden", type === "내 장비 작업");
+  if (providerGroup) providerGroup.classList.toggle("hidden", !isLinked);
+  if (directCollectionGroup) directCollectionGroup.classList.toggle("hidden", isLinked);
 }
 
 function setJobFormMode(isEditMode) {
@@ -649,6 +671,8 @@ function startJobEdit(job) {
   document.getElementById("invoiceIssued").value = job.invoiceIssued || "미발행";
   document.getElementById("payoutAmount").value = Number(job.payoutAmount || 0) || "";
   document.getElementById("payoutStatus").value = job.payoutStatus || "미지급";
+  const providerSelect = document.getElementById("dispatchProviderCustomer");
+  if (providerSelect) providerSelect.value = job.providerCustomerId || "";
 
   toggleJobTypeFields();
   setJobFormMode(true);
@@ -692,6 +716,13 @@ function bindForm() {
 
     const selectedCustomer = state.customers.find((customer) => customer.id === customerId);
     const jobType = document.getElementById("jobType").value;
+    const providerSelect = document.getElementById("dispatchProviderCustomer");
+    const providerCustomerId = providerSelect?.value || "";
+    const providerCustomer = state.customers.find((customer) => customer.id === providerCustomerId);
+    if (jobType === "연결 배차" && !providerCustomer) {
+      showToast("지급할 거래처를 선택해주세요.");
+      return;
+    }
     const record = {
       id: existingJob ? existingJob.id : createId("job"),
       date: document.getElementById("jobDate").value || getToday(),
@@ -714,6 +745,18 @@ function bindForm() {
       delete record.salesAmount;
       delete record.receivableStatus;
       delete record.invoiceIssued;
+      delete record.providerCustomerId;
+      delete record.providerCustomerName;
+    } else if (jobType === "연결 배차") {
+      record.salesAmount = Number(document.getElementById("salesAmount").value || 0);
+      record.receivableStatus = document.getElementById("receivableStatus").value;
+      record.directCollection = false;
+      record.invoiceIssued = document.getElementById("invoiceIssued").value;
+      record.providerCustomerId = providerCustomer.id;
+      record.providerCustomerName = providerCustomer.name;
+      record.providerName = providerCustomer.name;
+      record.payoutAmount = Number(document.getElementById("payoutAmount").value || 0);
+      record.payoutStatus = document.getElementById("payoutStatus").value;
     } else {
       record.salesAmount = Number(document.getElementById("salesAmount").value || 0);
       record.receivableStatus = document.getElementById("receivableStatus").value;
@@ -722,6 +765,8 @@ function bindForm() {
       delete record.providerName;
       delete record.payoutAmount;
       delete record.payoutStatus;
+      delete record.providerCustomerId;
+      delete record.providerCustomerName;
     }
 
     if (existingJob) {
@@ -753,19 +798,18 @@ function buildDatalists() {
 }
 
 function buildCustomerSelectOptions() {
-  const select = document.getElementById("jobCustomer");
-  if (!select) return;
-  const previousValue = select.value;
+  const selects = [document.getElementById("jobCustomer"), document.getElementById("dispatchProviderCustomer")].filter(Boolean);
+  if (!selects.length) return;
   const options = state.customers
-    .map((customer) => `<option value="${escapeHtml(customer.id)}" ${previousValue === customer.id ? "selected" : ""}>${escapeHtml(customer.name)}</option>`)
+    .map((customer) => `<option value="${escapeHtml(customer.id)}">${escapeHtml(customer.name)}</option>`)
     .join("");
-  select.innerHTML = `<option value="">거래처 선택</option>${options}`;
-  if (!state.customers.length) {
-    select.innerHTML = `<option value="">등록된 거래처 없음</option>`;
-  }
-  if (previousValue && state.customers.some((customer) => customer.id === previousValue)) {
-    select.value = previousValue;
-  }
+  selects.forEach((select) => {
+    const previousValue = select.value;
+    select.innerHTML = state.customers.length
+      ? `<option value="">거래처 선택</option>${options}`
+      : `<option value="">등록된 거래처 없음</option>`;
+    if (previousValue && state.customers.some((customer) => customer.id === previousValue)) select.value = previousValue;
+  });
 }
 
 function toggleCustomerQuickAdd(force) {
@@ -876,14 +920,21 @@ function syncJobsForCustomerRename({ customerId, oldName, newName }) {
     const matchesById = jobCustomerId && jobCustomerId === customerId;
     const matchesLegacyName = !jobCustomerId && previousName && jobCustomerName === previousName;
 
-    if (!matchesById && !matchesLegacyName) {
+    const providerCustomerId = String(job.providerCustomerId || "").trim();
+    const providerCustomerName = getProviderCustomerName(job);
+    const providerMatchesById = providerCustomerId && providerCustomerId === customerId;
+    const providerMatchesLegacyName = !providerCustomerId && previousName && providerCustomerName === previousName;
+
+    if (!matchesById && !matchesLegacyName && !providerMatchesById && !providerMatchesLegacyName) {
       return job;
     }
 
     return {
       ...job,
-      customerId,
-      customerName: nextName
+      ...(matchesById || matchesLegacyName ? { customerId, customerName: nextName } : {}),
+      ...(providerMatchesById || providerMatchesLegacyName
+        ? { providerCustomerId: customerId, providerCustomerName: nextName, providerName: nextName }
+        : {})
     };
   });
 }
@@ -1213,11 +1264,11 @@ function getExpenseFilterRange() {
 }
 
 function getSettlementJobAmount(job) {
-  return job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+  return hasReceivable(job) ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
 }
 
 function getSettlementCollectionStatus(job) {
-  if (job.jobType === "배차 작업") {
+  if (!hasReceivable(job)) {
     return String(
       job.payoutStatus
       || job.receivableStatus
@@ -1319,17 +1370,17 @@ function buildSettlementJobCountDetailHtml(report) {
 }
 
 function buildSettlementSalesDetailHtml(report) {
-  const jobs = report.jobs.filter((job) => job.jobType === "내 장비 작업");
+  const jobs = report.equipmentJobs || report.jobs.filter(isEquipmentJob);
   return buildSettlementGroupedJobSummaryHtml(jobs, "매출");
 }
 
 function buildSettlementCompletedDetailHtml(report) {
-  const jobs = report.jobs.filter((job) => job.jobType === "내 장비 작업" && job.receivableStatus === "수금완료");
+  const jobs = (report.receivableJobs || report.jobs.filter(hasReceivable)).filter((job) => job.receivableStatus === "수금완료");
   return buildSettlementGroupedJobSummaryHtml(jobs, "수금완료");
 }
 
 function buildSettlementOutstandingDetailHtml(report) {
-  const jobs = report.jobs.filter((job) => job.jobType === "내 장비 작업" && job.receivableStatus === "미수");
+  const jobs = (report.receivableJobs || report.jobs.filter(hasReceivable)).filter((job) => job.receivableStatus === "미수");
   return buildSettlementGroupedJobSummaryHtml(jobs, "미수");
 }
 
@@ -1373,8 +1424,8 @@ function buildSettlementExpenseAccordionDetailHtml(report) {
 }
 
 function buildSettlementPayableDetailHtml(report) {
-  const jobs = report.jobs
-    .filter((job) => job.jobType === "배차 작업" && String(job.payoutStatus || "").trim() === "미지급");
+  const jobs = (report.payoutJobs || report.jobs.filter(hasPayout))
+    .filter((job) => String(job.payoutStatus || "").trim() === "미지급");
   if (!jobs.length) return buildSettlementNoDataHtml();
 
   const grouped = jobs.reduce((map, job) => {
@@ -1395,16 +1446,87 @@ function buildSettlementPayableDetailHtml(report) {
   return `<div class="stack-list">${rows}</div><div class="settlement-accordion-total"><span>전체 미지급금 합계</span><strong>${escapeHtml(formatCurrency(total))}</strong></div>`;
 }
 
+function buildSettlementPayoutDetailHtml(report) {
+  const jobs = report.dispatchJobs || report.jobs.filter((job) => job.jobType === "배차 작업");
+  if (!jobs.length) return buildSettlementNoDataHtml();
+  const grouped = jobs.reduce((map, job) => {
+    const key = getProviderCustomerName(job) || getJobCustomerName(job) || "미입력";
+    if (!map[key]) map[key] = [];
+    map[key].push(job);
+    return map;
+  }, {});
+  const rows = Object.keys(grouped).sort((a, b) => a.localeCompare(b, "ko")).map((name) => {
+    const list = grouped[name];
+    const amount = list.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0);
+    return buildSettlementSimpleGroupHtml(name, list.length, amount, "지급액");
+  }).join("");
+  const total = jobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0);
+  return `<div class="stack-list">${rows}</div><div class="settlement-accordion-total"><span>전체 배차 지급액</span><strong>${escapeHtml(formatCurrency(total))}</strong></div>`;
+}
+
+function buildLinkedDispatchDetailHtml(report, mode) {
+  const jobs = report.linkedJobs || report.jobs.filter(isLinkedDispatchJob);
+  if (!jobs.length) return buildSettlementNoDataHtml();
+  const items = jobs.map((job) => {
+    const receive = Number(job.salesAmount || 0);
+    const payout = Number(job.payoutAmount || 0);
+    const value = mode === "receive" ? receive
+      : mode === "outstanding-receive" ? (job.receivableStatus === "미수" ? receive : 0)
+      : mode === "payout" ? payout
+      : mode === "outstanding-payout" ? (job.payoutStatus === "미지급" ? payout : 0)
+      : receive - payout;
+    if ((mode === "outstanding-receive" || mode === "outstanding-payout") && value === 0) return "";
+    return `
+      <article class="list-item settlement-accordion-item">
+        <div>
+          <strong>${escapeHtml(job.date || "-")} · ${escapeHtml(job.siteName || "현장 미입력")}</strong>
+          <p>${escapeHtml(getJobCustomerName(job) || "받을 거래처 미입력")} → ${escapeHtml(getProviderCustomerName(job) || "지급 거래처 미입력")}</p>
+        </div>
+        <div class="value-block"><p>${escapeHtml(formatCurrency(value))}</p></div>
+      </article>
+    `;
+  }).join("");
+  return items ? `<div class="stack-list">${items}</div>` : buildSettlementNoDataHtml();
+}
+
+function buildLinkedDispatchOverviewHtml(report) {
+  const jobs = report.linkedJobs || report.jobs.filter(isLinkedDispatchJob);
+  if (!jobs.length) return buildSettlementNoDataHtml();
+  const items = jobs.map((job) => {
+    const receive = Number(job.salesAmount || 0);
+    const payout = Number(job.payoutAmount || 0);
+    return `
+      <article class="list-item settlement-accordion-item">
+        <div>
+          <strong>${escapeHtml(job.date || "-")} · ${escapeHtml(job.siteName || "현장 미입력")}</strong>
+          <p>${escapeHtml(getJobCustomerName(job) || "받을 거래처 미입력")} → ${escapeHtml(getProviderCustomerName(job) || "지급 거래처 미입력")}</p>
+          <p class="muted">받을 돈 ${escapeHtml(formatCurrency(receive))} (${escapeHtml(job.receivableStatus || "미수")})</p>
+          <p class="muted">줄 돈 ${escapeHtml(formatCurrency(payout))} (${escapeHtml(job.payoutStatus || "미지급")})</p>
+        </div>
+        <div class="value-block">
+          <span class="pill">배차수익</span>
+          <p>${escapeHtml(formatCurrency(receive - payout))}</p>
+        </div>
+      </article>
+    `;
+  }).join("");
+  return `<div class="stack-list">${items}</div>`;
+}
+
 function buildSettlementProfitDetailHtml(report) {
   const totalSales = Number(report.summary?.totalSales || 0);
   const totalExpenses = Number(report.summary?.totalExpenses || 0);
-  const netProfit = totalSales - totalExpenses;
+  const totalPayout = Number(report.summary?.totalPayout || 0);
+  const linkedProfit = Number(report.summary?.linkedProfit || 0);
+  const netProfit = totalSales - totalExpenses - totalPayout + linkedProfit;
   return `
     <div class="settlement-profit-summary">
       <article class="list-item settlement-accordion-item"><strong>총매출</strong><strong>${escapeHtml(formatCurrency(totalSales))}</strong></article>
       <article class="list-item settlement-accordion-item"><strong>총지출</strong><strong>${escapeHtml(formatCurrency(totalExpenses))}</strong></article>
+      <article class="list-item settlement-accordion-item"><strong>배차 지급액</strong><strong>${escapeHtml(formatCurrency(totalPayout))}</strong></article>
+      <article class="list-item settlement-accordion-item"><strong>연결 배차수익</strong><strong>${escapeHtml(formatCurrency(linkedProfit))}</strong></article>
       <article class="list-item settlement-accordion-item"><strong>순이익</strong><strong>${escapeHtml(formatCurrency(netProfit))}</strong></article>
-      <p class="muted">계산식: 총매출 - 총지출</p>
+      <p class="muted">계산식: 내 장비 매출 - 총지출 - 일반 배차 지급액 + 연결 배차수익</p>
     </div>
   `;
 }
@@ -1412,7 +1534,7 @@ function buildSettlementProfitDetailHtml(report) {
 function buildSettlementAccordionDetailContent(detailKey, report) {
   switch (detailKey) {
     case "job-count":
-      return buildSettlementJobCountDetailHtml(report);
+      return buildSettlementJobCountDetailHtml({ ...report, jobs: report.equipmentJobs || report.jobs.filter(isEquipmentJob) });
     case "total-sales":
       return buildSettlementSalesDetailHtml(report);
     case "completed-receivable":
@@ -1423,6 +1545,20 @@ function buildSettlementAccordionDetailContent(detailKey, report) {
       return buildSettlementExpenseAccordionDetailHtml(report);
     case "outstanding-payable":
       return buildSettlementPayableDetailHtml(report);
+    case "total-payout":
+      return buildSettlementPayoutDetailHtml(report);
+    case "linked-count":
+      return buildLinkedDispatchOverviewHtml(report);
+    case "linked-receivable":
+      return buildLinkedDispatchDetailHtml(report, "receive");
+    case "linked-outstanding-receivable":
+      return buildLinkedDispatchDetailHtml(report, "outstanding-receive");
+    case "linked-payout":
+      return buildLinkedDispatchDetailHtml(report, "payout");
+    case "linked-outstanding-payable":
+      return buildLinkedDispatchDetailHtml(report, "outstanding-payout");
+    case "linked-profit":
+      return buildLinkedDispatchDetailHtml(report, "profit");
     case "net-profit":
       return buildSettlementProfitDetailHtml(report);
     default:
@@ -1595,35 +1731,57 @@ function buildSettlementReportData() {
     : String(selectedCustomer?.name || "").trim();
   const isAllCustomers = selectedSettlementCustomer === "all";
 
-  const isSelectedCustomerJob = (job) => {
+  const isReceivableCustomerJob = (job) => {
     if (isAllCustomers) return true;
+    if (job.customerId) return job.customerId === selectedSettlementCustomer;
+    return getJobCustomerName(job) === customerName;
+  };
+
+  const isPayoutCustomerJob = (job) => {
+    if (isAllCustomers) return true;
+    if (isLinkedDispatchJob(job)) {
+      if (job.providerCustomerId) return job.providerCustomerId === selectedSettlementCustomer;
+      return getProviderCustomerName(job) === customerName;
+    }
     if (job.customerId) return job.customerId === selectedSettlementCustomer;
     return getJobCustomerName(job) === customerName;
   };
 
   const filteredJobs = state.jobs.filter((job) => {
     if (!isDateInRange(job.date, range)) return false;
-    return isSelectedCustomerJob(job);
+    return (hasReceivable(job) && isReceivableCustomerJob(job)) || (hasPayout(job) && isPayoutCustomerJob(job));
   });
 
   const filteredExpenses = state.expenses.filter((expense) => isDateInRange(expense.date, range));
-  const equipmentJobs = filteredJobs.filter((job) => job.jobType === "내 장비 작업");
-  const unpaidDispatchJobs = filteredJobs.filter(
-    (job) => job.jobType === "배차 작업" && String(job.payoutStatus || "") === "미지급"
-  );
-  const completedReceivables = equipmentJobs.filter((job) => job.receivableStatus === "수금완료");
-  const outstandingReceivables = equipmentJobs.filter((job) => job.receivableStatus === "미수");
+  const equipmentJobs = filteredJobs.filter((job) => isEquipmentJob(job) && isReceivableCustomerJob(job));
+  const dispatchJobs = filteredJobs.filter((job) => job.jobType === "배차 작업" && isPayoutCustomerJob(job));
+  const linkedJobs = filteredJobs.filter(isLinkedDispatchJob);
+  const linkedReceivableJobs = linkedJobs.filter(isReceivableCustomerJob);
+  const linkedPayoutJobs = linkedJobs.filter(isPayoutCustomerJob);
+  const receivableJobs = filteredJobs.filter((job) => hasReceivable(job) && isReceivableCustomerJob(job));
+  const payoutJobs = filteredJobs.filter((job) => hasPayout(job) && isPayoutCustomerJob(job));
+  const unpaidDispatchJobs = payoutJobs.filter((job) => String(job.payoutStatus || "") === "미지급");
+  const completedReceivables = receivableJobs.filter((job) => job.receivableStatus === "수금완료");
+  const outstandingReceivables = receivableJobs.filter((job) => job.receivableStatus === "미수");
 
   const summary = {
-    jobCount: filteredJobs.length,
+    jobCount: equipmentJobs.length,
     totalSales: equipmentJobs.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
     completedReceivable: completedReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
     outstandingReceivable: outstandingReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
     totalExpenses: filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
+    totalPayout: dispatchJobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0),
     outstandingPayable: unpaidDispatchJobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0),
+    linkedCount: linkedJobs.length,
+    linkedReceivable: linkedReceivableJobs.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0),
+    linkedOutstandingReceivable: linkedReceivableJobs.reduce((sum, job) => sum + (job.receivableStatus === "미수" ? Number(job.salesAmount || 0) : 0), 0),
+    linkedPayout: linkedPayoutJobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0),
+    linkedOutstandingPayable: linkedPayoutJobs.reduce((sum, job) => sum + (job.payoutStatus === "미지급" ? Number(job.payoutAmount || 0) : 0), 0),
+    linkedProfit: 0,
     netProfit: 0
   };
-  summary.netProfit = summary.totalSales - summary.totalExpenses;
+  summary.linkedProfit = summary.linkedReceivable - summary.linkedPayout;
+  summary.netProfit = summary.totalSales - summary.totalExpenses - summary.totalPayout + summary.linkedProfit;
 
   const customerMap = new Map();
   filteredJobs.forEach((job) => {
@@ -1638,7 +1796,7 @@ function buildSettlementReportData() {
       });
     }
     const entry = customerMap.get(key);
-    entry.totalAmount += job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+    entry.totalAmount += hasReceivable(job) ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
     entry.count += 1;
   });
 
@@ -1652,6 +1810,11 @@ function buildSettlementReportData() {
     summary,
     customerSummaries: Array.from(customerMap.values()).sort((a, b) => b.totalAmount - a.totalAmount),
     jobs: filteredJobs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    equipmentJobs: equipmentJobs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    dispatchJobs: dispatchJobs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    linkedJobs: linkedJobs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    receivableJobs: receivableJobs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    payoutJobs: payoutJobs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")),
     expenses: filteredExpenses.slice()
   };
 }
@@ -1669,19 +1832,24 @@ function buildSettlementTrendMonthData(year, monthIndex) {
   const range = getMonthRangeKeysByYearMonth(year, monthIndex);
   const monthJobs = state.jobs.filter((job) => isDateInRange(job.date, range));
   const monthExpenses = state.expenses.filter((expense) => isDateInRange(expense.date, range));
-  const equipmentJobs = monthJobs.filter((job) => job.jobType === "내 장비 작업");
+  const equipmentJobs = monthJobs.filter(isEquipmentJob);
+  const payoutJobs = monthJobs.filter((job) => job.jobType === "배차 작업");
+  const linkedJobs = monthJobs.filter(isLinkedDispatchJob);
   const outstandingReceivables = equipmentJobs.filter((job) => job.receivableStatus === "미수");
 
   const totalSales = equipmentJobs.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
+  const totalPayout = payoutJobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0);
+  const linkedProfit = linkedJobs.reduce((sum, job) => sum + Number(job.salesAmount || 0) - Number(job.payoutAmount || 0), 0);
   const totalExpenses = monthExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 
   return {
     monthNumber: monthIndex + 1,
     label: `${monthIndex + 1}월`,
     totalSales,
-    jobCount: monthJobs.length,
+    jobCount: equipmentJobs.length,
     totalExpenses,
-    netProfit: totalSales - totalExpenses,
+    totalPayout,
+    netProfit: totalSales - totalExpenses - totalPayout + linkedProfit,
     outstandingReceivable: outstandingReceivables.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0)
   };
 }
@@ -1834,13 +2002,16 @@ function renderSettlementView() {
     { key: "outstanding-receivable", title: "미수금", value: formatCurrency(summary.outstandingReceivable) },
     { key: "outstanding-payable", title: "미지급금", value: formatCurrency(summary.outstandingPayable || 0) }
   ];
+  const linkedSummaryItems = isAllCustomersSelected && summary.linkedCount > 0 ? [
+    { key: "linked-count", title: "연결배차", value: `${summary.linkedCount}건 · 수익 ${formatCurrency(summary.linkedProfit || 0)}` }
+  ] : [];
   const allCustomerOnlySummaryItems = [
     { key: "total-expenses", title: "총지출", value: formatCurrency(summary.totalExpenses) },
     { key: "net-profit", title: "순이익", value: formatCurrency(summary.netProfit) }
   ];
   const summaryItems = isAllCustomersSelected
-    ? [...commonSummaryItems.slice(0, 4), ...allCustomerOnlySummaryItems, commonSummaryItems[4]]
-    : commonSummaryItems;
+    ? [...commonSummaryItems.slice(0, 4), ...linkedSummaryItems, ...allCustomerOnlySummaryItems, commonSummaryItems[4]]
+    : [...commonSummaryItems, ...linkedSummaryItems];
 
   if (!summaryItems.some((item) => item.key === activeSettlementDetailKey)) {
     activeSettlementDetailKey = null;
@@ -1904,13 +2075,17 @@ function buildSettlementStatementReportData(includeDirectCollection) {
   if (!baseReport?.filters || baseReport.filters.customerId === "all") {
     return {
       ...baseReport,
-      jobs: (baseReport.jobs || []).slice()
+      jobs: (baseReport.jobs || []).slice(),
+      receivableJobs: (baseReport.receivableJobs || []).slice(),
+      payoutJobs: (baseReport.payoutJobs || []).slice()
     };
   }
 
   return {
     ...baseReport,
-    jobs: filterSettlementStatementJobs(baseReport.jobs || [], includeDirectCollection)
+    jobs: filterSettlementStatementJobs(baseReport.jobs || [], includeDirectCollection),
+    receivableJobs: filterSettlementStatementJobs(baseReport.receivableJobs || [], includeDirectCollection),
+    payoutJobs: (baseReport.payoutJobs || []).slice()
   };
 }
 
@@ -1965,14 +2140,19 @@ function buildSettlementStatementHtml(report) {
     `;
   }
 
-  const equipmentJobs = sortedJobs.filter((job) => job.jobType === "내 장비 작업");
-  const dispatchJobs = sortedJobs.filter((job) => job.jobType === "배차 작업");
+  const equipmentJobs = (report.equipmentJobs || sortedJobs.filter(isEquipmentJob))
+    .filter(isEquipmentJob)
+    .slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const linkedReceivableJobs = (report.receivableJobs || sortedJobs.filter(hasReceivable))
+    .filter(isLinkedDispatchJob)
+    .slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const dispatchJobs = (report.payoutJobs || sortedJobs.filter(hasPayout))
+    .slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
-  const getSupplyAmount = (job) => (job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0));
   const getVatAmount = (supplyAmount) => Math.round(supplyAmount * 0.1);
 
-  const getSectionTotals = (jobs) => jobs.reduce((acc, job) => {
-    const supply = getSupplyAmount(job);
+  const getSectionTotals = (jobs, amountSelector) => jobs.reduce((acc, job) => {
+    const supply = amountSelector(job);
     const vat = getVatAmount(supply);
     acc.supply += supply;
     acc.vat += vat;
@@ -1980,8 +2160,8 @@ function buildSettlementStatementHtml(report) {
     return acc;
   }, { supply: 0, vat: 0, total: 0 });
 
-  const buildSectionRows = (jobs) => jobs.map((job) => {
-    const supplyAmount = getSupplyAmount(job);
+  const buildSectionRows = (jobs, amountSelector) => jobs.map((job) => {
+    const supplyAmount = amountSelector(job);
     const vatAmount = getVatAmount(supplyAmount);
     const totalAmount = supplyAmount + vatAmount;
 
@@ -1997,11 +2177,11 @@ function buildSettlementStatementHtml(report) {
     `;
   }).join("");
 
-  const buildSectionHtml = (title, jobs, subtotalLabel) => {
+  const buildSectionHtml = (title, jobs, subtotalLabel, amountSelector) => {
     if (!jobs.length) return "";
 
-    const totals = getSectionTotals(jobs);
-    const rows = buildSectionRows(jobs);
+    const totals = getSectionTotals(jobs, amountSelector);
+    const rows = buildSectionRows(jobs, amountSelector);
 
     return `
       <section class="statement-section-block">
@@ -2039,13 +2219,17 @@ function buildSettlementStatementHtml(report) {
     `;
   };
 
-  const equipmentTotals = getSectionTotals(equipmentJobs);
-  const dispatchTotals = getSectionTotals(dispatchJobs);
+  const receivableAmount = (job) => Number(job.salesAmount || 0);
+  const payoutAmount = (job) => Number(job.payoutAmount || 0);
+  const equipmentTotals = getSectionTotals(equipmentJobs, receivableAmount);
+  const linkedReceivableTotals = getSectionTotals(linkedReceivableJobs, receivableAmount);
+  const dispatchTotals = getSectionTotals(dispatchJobs, payoutAmount);
   const sectionBlocksHtml = [
-    buildSectionHtml("내 장비 작업", equipmentJobs, "내 장비 소계"),
-    buildSectionHtml("배차 작업", dispatchJobs, "배차 소계")
+    buildSectionHtml("내 장비 작업", equipmentJobs, "내 장비 소계", receivableAmount),
+    buildSectionHtml("배차 작업", linkedReceivableJobs, "배차 수금 소계", receivableAmount),
+    buildSectionHtml("배차 작업", dispatchJobs, "배차 지급 소계", payoutAmount)
   ].join("");
-  const settlementNetSupply = equipmentTotals.supply - dispatchTotals.supply;
+  const settlementNetSupply = equipmentTotals.supply + linkedReceivableTotals.supply - dispatchTotals.supply;
   const settlementVat = Math.round(settlementNetSupply * 0.1);
   const settlementFinalTotal = settlementNetSupply + settlementVat;
 
@@ -2531,19 +2715,26 @@ function renderDashboard() {
   const todayCount = todayJobs.length;
 
   const monthlySales = monthJobs
-    .filter((job) => job.jobType === "내 장비 작업")
+    .filter(isEquipmentJob)
     .reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
 
   const outstandingReceivable = state.jobs
-    .filter((job) => job.jobType === "내 장비 작업")
+    .filter(hasReceivable)
     .reduce((sum, job) => sum + (job.receivableStatus === "미수" ? Number(job.salesAmount || 0) : 0), 0);
 
   const outstandingPayable = state.jobs
-    .filter((job) => job.jobType === "배차 작업")
+    .filter(hasPayout)
     .reduce((sum, job) => sum + (job.payoutStatus === "미지급" ? Number(job.payoutAmount || 0) : 0), 0);
+  const monthlyPayout = monthJobs
+    .filter((job) => job.jobType === "배차 작업")
+    .reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0);
+  const monthlyLinkedJobs = monthJobs.filter(isLinkedDispatchJob);
+  const monthlyLinkedReceivable = monthlyLinkedJobs.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
+  const monthlyLinkedPayout = monthlyLinkedJobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0);
+  const monthlyLinkedProfit = monthlyLinkedReceivable - monthlyLinkedPayout;
   const monthlyExpenses = state.expenses.filter((expense) => expense.date && expense.date.startsWith(month));
   const totalExpenses = monthlyExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const netProfit = monthlySales - totalExpenses;
+  const netProfit = monthlySales - monthlyPayout - totalExpenses + monthlyLinkedProfit;
 
   document.getElementById("dashboardMetrics").innerHTML = [
     { title: "이번 달 매출", value: formatCurrency(monthlySales) },
@@ -2599,7 +2790,7 @@ function generateInvoiceNumber(job) {
 }
 
 function buildInvoiceHtml(job) {
-  const amount = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+  const amount = hasReceivable(job) ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
   const invoiceDate = job.date || getToday();
   const customerName = job.customerName || job.providerName || "미입력";
   const siteName = job.siteName || "미입력";
@@ -2779,7 +2970,7 @@ function renderCalendarView() {
         const jobs = jobsByDate[dateKey] || [];
         const hasJobs = jobs.length > 0;
         const hasEquipmentJobs = jobs.some((job) => job.jobType === "내 장비 작업");
-        const hasDispatchJobs = jobs.some((job) => job.jobType === "배차 작업");
+        const hasDispatchJobs = jobs.some(hasPayout);
         return `
           <button
             type="button"
@@ -2804,7 +2995,7 @@ function renderCalendarView() {
   if (selectedCalendarDate) {
     const selectedJobs = jobsByDate[selectedCalendarDate] || [];
     const dailySales = selectedJobs
-      .filter((job) => job.jobType === "내 장비 작업")
+      .filter(isEquipmentJob)
       .reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
 
     summary.innerHTML = `
@@ -2829,10 +3020,21 @@ function renderCalendarView() {
 function renderJobList() {
   const visibleJobs = getVisibleJobs();
   const items = visibleJobs.map((job) => {
-    const amountValue = job.jobType === "내 장비 작업" ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
+    const amountValue = hasReceivable(job) ? Number(job.salesAmount || 0) : Number(job.payoutAmount || 0);
     const amountText = formatAmountForList(amountValue);
-    const statusText = job.jobType === "내 장비 작업" ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
+    const statusText = hasReceivable(job) ? (job.receivableStatus || "미수") : (job.payoutStatus || "미지급");
     const statusClass = statusText === "수금완료" || statusText === "지급완료" ? "completed" : "pending";
+    const connectedFinanceHtml = isLinkedDispatchJob(job) ? `
+      <div class="job-card-finance">
+        <div class="job-amount-row"><span class="job-card-label">📥 받을 돈</span><span class="job-amount">${escapeHtml(formatAmountForList(job.salesAmount))}</span></div>
+        <span class="pill ${job.receivableStatus === "수금완료" ? "completed" : "pending"}">${escapeHtml(job.receivableStatus || "미수")}</span>
+      </div>
+      <div class="job-card-finance">
+        <div class="job-amount-row"><span class="job-card-label">📤 줄 돈</span><span class="job-amount">${escapeHtml(formatAmountForList(job.payoutAmount))}</span></div>
+        <span class="pill ${job.payoutStatus === "지급완료" ? "completed" : "pending"}">${escapeHtml(job.payoutStatus || "미지급")}</span>
+      </div>
+      <p class="muted">배차받은 업체: ${escapeHtml(getProviderCustomerName(job) || "미입력")} · 배차수익 ${escapeHtml(formatAmountForList(Number(job.salesAmount || 0) - Number(job.payoutAmount || 0)))}</p>
+    ` : "";
 
     return `
       <article class="list-item job-list-item">
@@ -2850,13 +3052,13 @@ function renderJobList() {
             <span class="job-card-label">📝</span>
             <p>${escapeHtml(job.workContent || "작업내용 없음")}</p>
           </div>
-          <div class="job-card-finance">
+          ${connectedFinanceHtml || `<div class="job-card-finance">
             <div class="job-amount-row">
               <span class="job-card-label">💰</span>
               <span class="job-amount">${escapeHtml(amountText)}</span>
             </div>
             <span class="pill ${statusClass}">${escapeHtml(statusText)}</span>
-          </div>
+          </div>`}
         </div>
         <div class="job-card-actions">
           <button class="tiny-btn" data-action="edit" data-id="${escapeHtml(job.id)}">수정</button>
