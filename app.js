@@ -2140,11 +2140,12 @@ function buildSettlementStatementHtml(report) {
     `;
   }
 
-  const equipmentJobs = (report.equipmentJobs || sortedJobs.filter(isEquipmentJob))
-    .filter(isEquipmentJob)
-    .slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  const equipmentOnlyJobs = (report.equipmentJobs || sortedJobs.filter(isEquipmentJob))
+    .filter(isEquipmentJob);
   const linkedReceivableJobs = (report.receivableJobs || sortedJobs.filter(hasReceivable))
-    .filter(isLinkedDispatchJob)
+    .filter(isLinkedDispatchJob);
+  // 연결배차는 실제 작업이 아니므로 배차 작업이 아닌 내 장비 작업 소계에 포함한다.
+  const equipmentJobs = equipmentOnlyJobs.concat(linkedReceivableJobs)
     .slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const dispatchJobs = (report.payoutJobs || sortedJobs.filter(hasPayout))
     .slice().sort((a, b) => (a.date || "").localeCompare(b.date || ""));
@@ -2222,14 +2223,12 @@ function buildSettlementStatementHtml(report) {
   const receivableAmount = (job) => Number(job.salesAmount || 0);
   const payoutAmount = (job) => Number(job.payoutAmount || 0);
   const equipmentTotals = getSectionTotals(equipmentJobs, receivableAmount);
-  const linkedReceivableTotals = getSectionTotals(linkedReceivableJobs, receivableAmount);
   const dispatchTotals = getSectionTotals(dispatchJobs, payoutAmount);
   const sectionBlocksHtml = [
     buildSectionHtml("내 장비 작업", equipmentJobs, "내 장비 소계", receivableAmount),
-    buildSectionHtml("배차 작업", linkedReceivableJobs, "배차 수금 소계", receivableAmount),
     buildSectionHtml("배차 작업", dispatchJobs, "배차 지급 소계", payoutAmount)
   ].join("");
-  const settlementNetSupply = equipmentTotals.supply + linkedReceivableTotals.supply - dispatchTotals.supply;
+  const settlementNetSupply = equipmentTotals.supply - dispatchTotals.supply;
   const settlementVat = Math.round(settlementNetSupply * 0.1);
   const settlementFinalTotal = settlementNetSupply + settlementVat;
 
