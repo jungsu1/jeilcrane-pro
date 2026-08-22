@@ -754,6 +754,67 @@ body[data-theme="light"] .pill.pending {
   border-color: transparent;
 }
 
+.settlement-outstanding-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.settlement-outstanding-btn {
+  color: #fffbeb;
+  background: #422006;
+  border-color: #fbbf24;
+  font-weight: 800;
+}
+
+.settlement-outstanding-btn.active {
+  color: #fff7ed;
+  background: #b45309;
+  border-color: #fcd34d;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.28);
+}
+
+body[data-theme="light"] .settlement-outstanding-btn {
+  color: #fff7ed;
+  background: #7c2d12;
+  border-color: #c2410c;
+}
+
+body[data-theme="light"] .settlement-outstanding-btn.active {
+  color: #ffffff;
+  background: #9a3412;
+  border-color: #7c2d12;
+  box-shadow: 0 0 0 2px rgba(154, 52, 18, 0.18);
+}
+
+.settlement-payable-btn {
+  color: #ecfeff;
+  background: #164e63;
+  border-color: #67e8f9;
+  font-weight: 800;
+}
+
+.settlement-payable-btn.active {
+  color: #f0fdfa;
+  background: #0f766e;
+  border-color: #99f6e4;
+  box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.28);
+}
+
+body[data-theme="light"] .settlement-payable-btn {
+  color: #134e4a;
+  background: #ccfbf1;
+  border-color: #0f766e;
+}
+
+body[data-theme="light"] .settlement-payable-btn.active {
+  color: #ffffff;
+  background: #115e59;
+  border-color: #134e4a;
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.18);
+}
+
 .settlement-filter-row {
   margin-bottom: 10px;
 }
@@ -784,6 +845,56 @@ body[data-theme="light"] .pill.pending {
 
 .settlement-summary-card {
   min-height: 98px;
+}
+
+.settlement-outstanding-quick-panel {
+  display: grid;
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+
+.settlement-outstanding-quick-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.settlement-outstanding-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 16px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.settlement-payable-quick-panel {
+  display: grid;
+  gap: 10px;
+  grid-column: 1 / -1;
+}
+
+.settlement-payable-quick-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.settlement-payable-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 16px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
 }
 
 .settlement-summary-btn {

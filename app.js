@@ -7,6 +7,8 @@ let selectedCalendarDate = null;
 let calendarViewDate = new Date();
 let selectedSettlementPeriod = "this-month";
 let selectedSettlementCustomer = "all";
+let outstandingSettlementView = false;
+let payableSettlementView = false;
 let currentSettlementReport = null;
 let includeDirectCollectionInStatement = false;
 let selectedSettlementStatementSite = "all";
@@ -1200,6 +1202,27 @@ function updateSettlementPeriodUI() {
   if (customPeriodRow) {
     customPeriodRow.classList.toggle("hidden", selectedSettlementPeriod !== "custom");
   }
+
+  const outstandingButton = document.getElementById("settlementOutstandingBtn");
+  if (outstandingButton) {
+    outstandingButton.classList.toggle("active", outstandingSettlementView);
+    outstandingButton.setAttribute("aria-pressed", outstandingSettlementView ? "true" : "false");
+    outstandingButton.textContent = outstandingSettlementView ? "미수금 조회 중" : "미수금";
+  }
+
+  const payableButton = document.getElementById("settlementPayableBtn");
+  if (payableButton) {
+    payableButton.classList.toggle("active", payableSettlementView);
+    payableButton.setAttribute("aria-pressed", payableSettlementView ? "true" : "false");
+    payableButton.textContent = payableSettlementView ? "미지급금 조회 중" : "미지급금";
+  }
+
+  const statementButton = document.getElementById("settlementStatementBtn");
+  if (statementButton) {
+    statementButton.textContent = outstandingSettlementView
+      ? "미수내역서 출력"
+      : payableSettlementView ? "미지급내역서 출력" : "거래내역서 출력";
+  }
 }
 
 function updateExpensePeriodUI() {
@@ -1820,6 +1843,110 @@ function buildSettlementReportData() {
   };
 }
 
+function buildOutstandingSettlementReport(report) {
+  const outstandingJobs = (report.receivableJobs || [])
+    .filter(isOutstandingReceivableJob)
+    .slice()
+    .sort(sortJobsByDateAsc);
+
+  return {
+    ...report,
+    jobs: outstandingJobs,
+    equipmentJobs: outstandingJobs.filter(isEquipmentJob),
+    dispatchJobs: [],
+    linkedJobs: outstandingJobs.filter(isLinkedDispatchJob),
+    receivableJobs: outstandingJobs,
+    payoutJobs: [],
+    outstandingJobs
+  };
+}
+
+function buildOutstandingSettlementViewHtml(report) {
+  const jobs = report.outstandingJobs || [];
+  const total = jobs.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
+  if (!jobs.length) {
+    return '<p class="muted settlement-outstanding-empty">현재 미수 건이 없습니다.</p>';
+  }
+
+  const items = jobs.map((job) => `
+    <article class="list-item settlement-outstanding-item">
+      <div>
+        <strong>${escapeHtml(job.date || "-")} · ${escapeHtml(getJobCustomerName(job) || "미입력")}</strong>
+        <p>${escapeHtml(job.siteName || "현장 미입력")} · ${escapeHtml(job.workContent || "작업내용 없음")}</p>
+      </div>
+      <div class="value-block">
+        <span class="pill pending">미수</span>
+        <p>${escapeHtml(formatCurrency(job.salesAmount || 0))}</p>
+      </div>
+    </article>
+  `).join("");
+
+  return `
+    <section class="settlement-outstanding-quick-panel" aria-label="미수금 조회 결과">
+      <div class="settlement-outstanding-quick-header">
+        <strong>미수금 ${jobs.length}건</strong>
+        <strong>${escapeHtml(formatCurrency(total))}</strong>
+      </div>
+      <div class="stack-list">${items}</div>
+    </section>
+  `;
+}
+
+function buildPayableSettlementReport(report) {
+  const payableJobs = (report.payoutJobs || [])
+    .filter((job) => String(job.payoutStatus || "") === "미지급")
+    .slice()
+    .sort(sortJobsByDateAsc);
+
+  return {
+    ...report,
+    jobs: payableJobs,
+    equipmentJobs: [],
+    dispatchJobs: payableJobs.filter((job) => job.jobType === "배차 작업"),
+    linkedJobs: payableJobs.filter(isLinkedDispatchJob),
+    receivableJobs: [],
+    payoutJobs: payableJobs,
+    payableJobs
+  };
+}
+
+function getPayableCustomerName(job) {
+  return isLinkedDispatchJob(job)
+    ? getProviderCustomerName(job)
+    : getJobCustomerName(job);
+}
+
+function buildPayableSettlementViewHtml(report) {
+  const jobs = report.payableJobs || [];
+  const total = jobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0);
+  if (!jobs.length) {
+    return '<p class="muted settlement-payable-empty">현재 미지급 건이 없습니다.</p>';
+  }
+
+  const items = jobs.map((job) => `
+    <article class="list-item settlement-payable-item">
+      <div>
+        <strong>${escapeHtml(job.date || "-")} · ${escapeHtml(getPayableCustomerName(job) || "미입력")}</strong>
+        <p>${escapeHtml(job.siteName || "현장 미입력")} · ${escapeHtml(job.workContent || "작업내용 없음")}</p>
+      </div>
+      <div class="value-block">
+        <span class="pill pending">미지급</span>
+        <p>${escapeHtml(formatCurrency(job.payoutAmount || 0))}</p>
+      </div>
+    </article>
+  `).join("");
+
+  return `
+    <section class="settlement-payable-quick-panel" aria-label="미지급금 조회 결과">
+      <div class="settlement-payable-quick-header">
+        <strong>미지급금 ${jobs.length}건</strong>
+        <strong>${escapeHtml(formatCurrency(total))}</strong>
+      </div>
+      <div class="stack-list">${items}</div>
+    </section>
+  `;
+}
+
 function getMonthRangeKeysByYearMonth(year, monthIndex) {
   const start = new Date(year, monthIndex, 1);
   const end = new Date(year, monthIndex + 1, 0);
@@ -1993,6 +2120,17 @@ function renderSettlementView() {
   currentSettlementReport = buildSettlementReportData();
   window.jeilcraneSettlementReport = currentSettlementReport;
 
+  if (outstandingSettlementView || payableSettlementView) {
+    const outstandingReport = buildOutstandingSettlementReport(currentSettlementReport);
+    const payableReport = buildPayableSettlementReport(currentSettlementReport);
+    document.getElementById("settlementSummary").innerHTML = payableSettlementView
+      ? buildPayableSettlementViewHtml(payableReport)
+      : buildOutstandingSettlementViewHtml(outstandingReport);
+    document.getElementById("settlementCustomers").innerHTML = "";
+    document.getElementById("settlementJobList").innerHTML = "";
+    return;
+  }
+
   const { summary } = currentSettlementReport;
   const isAllCustomersSelected = selectedSettlementCustomer === "all";
 
@@ -2051,7 +2189,7 @@ function getStatementDirectCollectionOption() {
 }
 
 function shouldShowStatementDirectCollectionOption() {
-  return selectedSettlementCustomer !== "all";
+  return !outstandingSettlementView && !payableSettlementView && selectedSettlementCustomer !== "all";
 }
 
 function updateStatementDirectCollectionOptionVisibility() {
@@ -2073,6 +2211,9 @@ function filterSettlementStatementJobs(jobs, includeDirectCollection) {
 
 function buildSettlementStatementReportData(includeDirectCollection) {
   const baseReport = buildSettlementReportData();
+  const statementBaseReport = outstandingSettlementView
+    ? buildOutstandingSettlementReport(baseReport)
+    : payableSettlementView ? buildPayableSettlementReport(baseReport) : baseReport;
   const filterBySite = (jobs) => (jobs || []).filter((job) => {
     if (selectedSettlementStatementSite === "all") return true;
     const siteName = String(job.siteName || "").trim();
@@ -2081,26 +2222,26 @@ function buildSettlementStatementReportData(includeDirectCollection) {
       : siteName === selectedSettlementStatementSite;
   });
 
-  if (!baseReport?.filters || baseReport.filters.customerId === "all") {
+  if (!statementBaseReport?.filters || statementBaseReport.filters.customerId === "all") {
     return {
-      ...baseReport,
-      jobs: filterBySite(baseReport.jobs),
-      equipmentJobs: filterBySite(baseReport.equipmentJobs),
-      dispatchJobs: filterBySite(baseReport.dispatchJobs),
-      linkedJobs: filterBySite(baseReport.linkedJobs),
-      receivableJobs: filterBySite(baseReport.receivableJobs),
-      payoutJobs: filterBySite(baseReport.payoutJobs)
+      ...statementBaseReport,
+      jobs: filterBySite(statementBaseReport.jobs),
+      equipmentJobs: filterBySite(statementBaseReport.equipmentJobs),
+      dispatchJobs: filterBySite(statementBaseReport.dispatchJobs),
+      linkedJobs: filterBySite(statementBaseReport.linkedJobs),
+      receivableJobs: filterBySite(statementBaseReport.receivableJobs),
+      payoutJobs: filterBySite(statementBaseReport.payoutJobs)
     };
   }
 
   return {
-    ...baseReport,
-    jobs: filterBySite(filterSettlementStatementJobs(baseReport.jobs || [], includeDirectCollection)),
-    equipmentJobs: filterBySite(baseReport.equipmentJobs),
-    dispatchJobs: filterBySite(baseReport.dispatchJobs),
-    linkedJobs: filterBySite(baseReport.linkedJobs),
-    receivableJobs: filterBySite(filterSettlementStatementJobs(baseReport.receivableJobs || [], includeDirectCollection)),
-    payoutJobs: filterBySite(baseReport.payoutJobs)
+    ...statementBaseReport,
+    jobs: filterBySite(filterSettlementStatementJobs(statementBaseReport.jobs || [], includeDirectCollection)),
+    equipmentJobs: filterBySite(statementBaseReport.equipmentJobs),
+    dispatchJobs: filterBySite(statementBaseReport.dispatchJobs),
+    linkedJobs: filterBySite(statementBaseReport.linkedJobs),
+    receivableJobs: filterBySite(filterSettlementStatementJobs(statementBaseReport.receivableJobs || [], includeDirectCollection)),
+    payoutJobs: filterBySite(statementBaseReport.payoutJobs)
   };
 }
 
@@ -2141,7 +2282,118 @@ function buildSettlementStatementSiteSelection(report) {
   `;
 }
 
+function buildOutstandingStatementHtml(report) {
+  const selectedCustomer = state.customers.find((customer) => customer.id === report.filters.customerId);
+  const customerName = selectedCustomer?.name || report.filters.customerName || "전체 거래처";
+  const periodLabel = getSettlementPeriodLabel(report);
+  const siteLabel = selectedSettlementStatementSite === "all"
+    ? "전체"
+    : selectedSettlementStatementSite === "__unspecified__" ? "현장 미지정" : selectedSettlementStatementSite;
+  const jobs = (report.jobs || []).slice().sort(sortJobsByDateAsc);
+  const total = jobs.reduce((sum, job) => sum + Number(job.salesAmount || 0), 0);
+  const rows = jobs.map((job) => `
+    <tr class="statement-row">
+      <td class="date-cell">${escapeHtml(job.date || "")}</td>
+      <td>${escapeHtml(getJobCustomerName(job) || customerName)}</td>
+      <td class="site-cell">${escapeHtml(job.siteName || "현장 미입력")}</td>
+      <td class="work-cell">${escapeHtml(job.workContent || "작업내용 없음")}</td>
+      <td class="amount-cell">${escapeHtml(formatCurrency(job.salesAmount || 0))}</td>
+      <td class="amount-cell">${escapeHtml(formatCurrency(job.salesAmount || 0))}</td>
+    </tr>
+  `).join("");
+
+  return `
+    <div class="report-scale-wrapper">
+      <article class="report-document settlement-a4-document" aria-label="미수내역서 A4 문서">
+        <header class="statement-header">
+          <h2>미수내역서</h2>
+          <div class="statement-meta">
+            <div>현장명: ${escapeHtml(siteLabel)}</div>
+            <div>조회기간: ${escapeHtml(periodLabel)}</div>
+          </div>
+        </header>
+        <section class="statement-parties">
+          <div class="statement-party-box">
+            <h3>거래처 정보</h3>
+            <div>거래처명: ${escapeHtml(customerName)}</div>
+          </div>
+        </section>
+        ${rows ? `
+          <section class="statement-section-block">
+            <table class="settlement-a4-table">
+              <thead><tr><th>날짜</th><th>거래처</th><th>현장명</th><th>작업내용</th><th>원래 받을 금액</th><th>현재 미수금액</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </section>
+        ` : '<p class="statement-empty-note">선택한 조건의 미수 내역이 없습니다.</p>'}
+        <footer class="statement-total-box">
+          <div class="statement-total-title">■ 미수 합계</div>
+          <div><span>미수 작업건수</span><strong>${jobs.length}건</strong></div>
+          <div><span>전체 미수금</span><strong>${escapeHtml(formatCurrency(total))}</strong></div>
+        </footer>
+      </article>
+    </div>
+  `;
+}
+
+function buildPayableStatementHtml(report) {
+  const selectedCustomer = state.customers.find((customer) => customer.id === report.filters.customerId);
+  const customerName = selectedCustomer?.name || report.filters.customerName || "전체 거래처";
+  const periodLabel = getSettlementPeriodLabel(report);
+  const siteLabel = selectedSettlementStatementSite === "all"
+    ? "전체"
+    : selectedSettlementStatementSite === "__unspecified__" ? "현장 미지정" : selectedSettlementStatementSite;
+  const jobs = (report.jobs || []).slice().sort(sortJobsByDateAsc);
+  const total = jobs.reduce((sum, job) => sum + Number(job.payoutAmount || 0), 0);
+  const rows = jobs.map((job) => `
+    <tr class="statement-row">
+      <td class="date-cell">${escapeHtml(job.date || "")}</td>
+      <td>${escapeHtml(getPayableCustomerName(job) || customerName)}</td>
+      <td class="site-cell">${escapeHtml(job.siteName || "현장 미입력")}</td>
+      <td class="work-cell">${escapeHtml(job.workContent || "작업내용 없음")}</td>
+      <td class="amount-cell">${escapeHtml(formatCurrency(job.payoutAmount || 0))}</td>
+      <td class="amount-cell">${escapeHtml(formatCurrency(job.payoutAmount || 0))}</td>
+    </tr>
+  `).join("");
+
+  return `
+    <div class="report-scale-wrapper">
+      <article class="report-document settlement-a4-document" aria-label="미지급내역서 A4 문서">
+        <header class="statement-header">
+          <h2>미지급내역서</h2>
+          <div class="statement-meta">
+            <div>현장명: ${escapeHtml(siteLabel)}</div>
+            <div>조회기간: ${escapeHtml(periodLabel)}</div>
+          </div>
+        </header>
+        <section class="statement-parties">
+          <div class="statement-party-box">
+            <h3>지급 거래처 정보</h3>
+            <div>선택 거래처: ${escapeHtml(customerName)}</div>
+          </div>
+        </section>
+        ${rows ? `
+          <section class="statement-section-block">
+            <table class="settlement-a4-table">
+              <thead><tr><th>날짜</th><th>지급할 거래처</th><th>현장명</th><th>작업내용</th><th>원래 지급금액</th><th>현재 미지급금액</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </section>
+        ` : '<p class="statement-empty-note">선택한 조건의 미지급 내역이 없습니다.</p>'}
+        <footer class="statement-total-box">
+          <div class="statement-total-title">■ 미지급 합계</div>
+          <div><span>미지급 작업건수</span><strong>${jobs.length}건</strong></div>
+          <div><span>전체 미지급금</span><strong>${escapeHtml(formatCurrency(total))}</strong></div>
+        </footer>
+      </article>
+    </div>
+  `;
+}
+
 function buildSettlementStatementHtml(report) {
+  if (outstandingSettlementView) return buildOutstandingStatementHtml(report);
+  if (payableSettlementView) return buildPayableStatementHtml(report);
+
   const companyInfo = getCompanyInfo();
   const selectedCustomer = state.customers.find((customer) => customer.id === report.filters.customerId);
   const customerName = selectedCustomer?.name || report.filters.customerName || "선택된 거래처";
@@ -2519,8 +2771,11 @@ async function downloadSettlementPdf() {
 
 function openSettlementStatement() {
   const baseReport = buildSettlementReportData();
+  const statementReport = outstandingSettlementView
+    ? buildOutstandingSettlementReport(baseReport)
+    : payableSettlementView ? buildPayableSettlementReport(baseReport) : baseReport;
 
-  if (!baseReport || baseReport.jobs.length === 0) {
+  if (!statementReport || statementReport.jobs.length === 0) {
     showToast("선택한 조건의 작업이 없어 출력할 수 없습니다.");
     return;
   }
@@ -2529,7 +2784,7 @@ function openSettlementStatement() {
   const modal = document.getElementById("settlementStatementModal");
   const siteSelectionPanel = document.getElementById("statementSiteSelectionPanel");
   const reportPanel = document.getElementById("statementReportPanel");
-  siteSelectionPanel.innerHTML = buildSettlementStatementSiteSelection(baseReport);
+  siteSelectionPanel.innerHTML = buildSettlementStatementSiteSelection(statementReport);
   siteSelectionPanel.classList.remove("hidden");
   reportPanel.classList.add("hidden");
   modal.classList.remove("hidden");
@@ -3567,9 +3822,31 @@ function initializeApp() {
   document.querySelectorAll("[data-period]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedSettlementPeriod = button.dataset.period;
+      outstandingSettlementView = false;
+      payableSettlementView = false;
       renderSettlementView();
     });
   });
+
+  const outstandingButton = document.getElementById("settlementOutstandingBtn");
+  if (outstandingButton) {
+    outstandingButton.addEventListener("click", () => {
+      outstandingSettlementView = !outstandingSettlementView;
+      payableSettlementView = false;
+      activeSettlementDetailKey = null;
+      renderSettlementView();
+    });
+  }
+
+  const payableButton = document.getElementById("settlementPayableBtn");
+  if (payableButton) {
+    payableButton.addEventListener("click", () => {
+      payableSettlementView = !payableSettlementView;
+      outstandingSettlementView = false;
+      activeSettlementDetailKey = null;
+      renderSettlementView();
+    });
+  }
 
   document.querySelectorAll("[data-expense-period]").forEach((button) => {
     button.addEventListener("click", () => {
