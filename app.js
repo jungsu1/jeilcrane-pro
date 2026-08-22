@@ -1,6 +1,7 @@
 ﻿const STORAGE_KEY = "jeilcrane-pro-db-v2";
 const THEME_STORAGE_KEY = "jeilcrane-pro-theme";
 const LEGACY_DIRECT_COLLECTION_STATUS = "직접수금";
+const BACKUP_VERSION = 1;
 const EXPENSE_CATEGORIES = ["주유", "장비수리", "소모품", "식비", "보험", "기타"];
 let selectedCustomerId = null;
 let selectedCalendarDate = null;
@@ -457,7 +458,7 @@ async function downloadInvoice() {
     doc.save(fileName);
     showToast("PDF 파일을 저장했습니다.");
   } catch (error) {
-    console.error(error);
+    console.warn("백업 파일 적용 실패", error);
     showToast("PDF 저장에 실패했습니다.");
   }
 }
@@ -3536,15 +3537,58 @@ function handleListActions(event) {
   }
 }
 
-function exportBackup() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+function createBackupPayload() {
+  return {
+    appName: "JEIL PRO",
+    backupVersion: BACKUP_VERSION,
+    createdAt: new Date().toISOString(),
+    data: {
+      ...JSON.parse(JSON.stringify(state)),
+      theme: getStoredTheme()
+    }
+  };
+}
+
+function createBackupFile() {
+  const payload = createBackupPayload();
+  const fileName = `JEIL_PRO_BACKUP_${getToday()}.json`;
+  return new File([JSON.stringify(payload, null, 2)], fileName, { type: "application/json" });
+}
+
+function downloadBackupFile(file, message = "백업 파일이 생성되었습니다.") {
+  const blob = file instanceof Blob ? file : new Blob([file], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `jeilcrane-backup-${formatBackupTimestamp(new Date())}.json`;
+  link.download = file.name || `JEIL_PRO_BACKUP_${getToday()}.json`;
   link.click();
   URL.revokeObjectURL(url);
-  showToast("백업 파일이 다운로드되었습니다.");
+  showToast(message);
+}
+
+function exportBackup() {
+  downloadBackupFile(createBackupFile());
+}
+
+async function emailBackup() {
+  const file = createBackupFile();
+  const shareData = {
+    title: "JEIL PRO 데이터 백업",
+    text: "JEIL PRO 데이터 백업 파일입니다.",
+    files: [file]
+  };
+
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share(shareData);
+      showToast("백업 파일 공유 창을 열었습니다.");
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+    }
+  }
+
+  downloadBackupFile(file, "백업 파일을 저장한 후 이메일에 첨부해주세요.");
 }
 
 function closeBackupRestoreConfirm(confirmed) {
@@ -3659,6 +3703,33 @@ function applyBackupData(imported) {
   return restoredAny;
 }
 
+function validateBackupPayload(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("INVALID_BACKUP_FORMAT");
+  if (parsed.appName !== "JEIL PRO") {
+    throw new Error("INVALID_BACKUP_FORMAT");
+  }
+  if (Number(parsed.backupVersion) !== BACKUP_VERSION) {
+    throw new Error("INVALID_BACKUP_VERSION");
+  }
+
+  const candidate = parsed.data;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) throw new Error("INVALID_BACKUP_FORMAT");
+  if (!Array.isArray(candidate.jobs) || !Array.isArray(candidate.customers) || !Array.isArray(candidate.expenses)) {
+    throw new Error("INVALID_BACKUP_FORMAT");
+  }
+  if (!candidate.companyInfo || typeof candidate.companyInfo !== "object" || Array.isArray(candidate.companyInfo)) {
+    throw new Error("INVALID_BACKUP_FORMAT");
+  }
+  if (!candidate.invoiceNumberState || typeof candidate.invoiceNumberState !== "object" || Array.isArray(candidate.invoiceNumberState)) {
+    throw new Error("INVALID_BACKUP_FORMAT");
+  }
+
+  return {
+    state: normalizeState(candidate),
+    theme: candidate.theme === "light" ? "light" : "dark"
+  };
+}
+
 async function importBackup(event) {
   const input = event.target;
   const file = input?.files?.[0];
@@ -3677,7 +3748,7 @@ async function importBackup(event) {
   try {
     rawText = await readBackupFileText(file);
   } catch (error) {
-    console.error(error);
+    console.warn("백업 파일 JSON 파싱 실패", error);
     showToast("백업 파일을 읽을 수 없습니다.");
     if (input) input.value = "";
     return;
@@ -3687,30 +3758,29 @@ async function importBackup(event) {
   try {
     parsed = JSON.parse(rawText);
   } catch (error) {
-    console.error(error);
+    console.warn("백업 파일 검증 실패", error);
     showToast("올바른 백업 파일이 아닙니다.");
     if (input) input.value = "";
     return;
   }
 
   try {
-    const importedRoot = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-    const candidate =
-      importedRoot && importedRoot.data && typeof importedRoot.data === "object" && !Array.isArray(importedRoot.data)
-        ? importedRoot.data
-        : importedRoot;
-
-    if (!candidate || !applyBackupData(candidate)) {
-      throw new Error("INVALID_BACKUP_FORMAT");
-    }
-
+    const restored = validateBackupPayload(parsed);
+    state.jobs = restored.state.jobs;
+    state.customers = restored.state.customers;
+    state.expenses = restored.state.expenses;
+    state.companyInfo = restored.state.companyInfo;
+    state.invoiceNumberState = restored.state.invoiceNumberState;
     saveState();
+    applyTheme(restored.theme);
     populateSettingsForm();
     renderAll();
     showToast("복원이 완료되었습니다.");
   } catch (error) {
-    console.error(error);
-    if (error && error.message === "INVALID_BACKUP_FORMAT") {
+    console.warn("백업 파일 적용 실패", error);
+    if (error && error.message === "INVALID_BACKUP_VERSION") {
+      showToast("지원하지 않는 JEIL PRO 백업 버전입니다.");
+    } else if (error && error.message === "INVALID_BACKUP_FORMAT") {
       showToast("올바른 백업 파일이 아닙니다.");
     } else {
       showToast("복원 중 오류가 발생했습니다.");
@@ -3762,6 +3832,9 @@ function initializeApp() {
   }
   document.querySelectorAll("[data-backup-export]").forEach((button) => {
     button.addEventListener("click", exportBackup);
+  });
+  document.querySelectorAll("[data-backup-email]").forEach((button) => {
+    button.addEventListener("click", emailBackup);
   });
   document.querySelectorAll("[data-backup-import]").forEach((input) => {
     input.addEventListener("click", () => {
