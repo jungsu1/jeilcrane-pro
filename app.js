@@ -3549,50 +3549,23 @@ function createBackupPayload() {
   };
 }
 
-function createBackupFile() {
+function createBackupBlob() {
   const payload = createBackupPayload();
-  const fileName = `JEIL_PRO_BACKUP_${getToday()}.json`;
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  return new File([blob], fileName, { type: "application/json" });
+  return new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
 }
 
-function downloadBackupFile(file, message = "백업 파일이 생성되었습니다.") {
-  const blob = file instanceof Blob ? file : new Blob([file], { type: "application/json" });
+function downloadBackupFile(blob, message = "백업 파일이 생성되었습니다.") {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = file.name || `JEIL_PRO_BACKUP_${getToday()}.json`;
+  link.download = `JEIL_PRO_BACKUP_${getToday()}.json`;
   link.click();
   URL.revokeObjectURL(url);
   showToast(message);
 }
 
 function exportBackup() {
-  downloadBackupFile(createBackupFile());
-}
-
-async function emailBackup() {
-  const file = createBackupFile();
-  const payload = createBackupPayload();
-  const shareData = {
-    title: "JEIL PRO 백업",
-    text: `JEIL PRO 백업 파일입니다.\n백업 생성일시: ${payload.createdAt}`,
-    files: [file]
-  };
-  const canShareFiles = typeof navigator.canShare === "function"
-    && navigator.canShare({ files: [file] });
-
-  if (typeof navigator.share === "function" && canShareFiles) {
-    try {
-      await navigator.share(shareData);
-      showToast("백업 파일 공유 창을 열었습니다.");
-      return;
-    } catch (error) {
-      if (error?.name === "AbortError") return;
-    }
-  }
-
-  downloadBackupFile(file, "백업 파일을 저장한 후 이메일에 첨부해주세요.");
+  downloadBackupFile(createBackupBlob());
 }
 
 function closeBackupRestoreConfirm(confirmed) {
@@ -3836,9 +3809,6 @@ function initializeApp() {
   }
   document.querySelectorAll("[data-backup-export]").forEach((button) => {
     button.addEventListener("click", exportBackup);
-  });
-  document.querySelectorAll("[data-backup-email]").forEach((button) => {
-    button.addEventListener("click", emailBackup);
   });
   document.querySelectorAll("[data-backup-import]").forEach((input) => {
     input.addEventListener("click", () => {
