@@ -9,6 +9,7 @@ let selectedSettlementPeriod = "this-month";
 let selectedSettlementCustomer = "all";
 let currentSettlementReport = null;
 let includeDirectCollectionInStatement = false;
+let selectedSettlementStatementSite = "all";
 let activeSettlementDetailKey = null;
 let selectedExpensePeriod = "this-month";
 let editingJobId = null;
@@ -2072,21 +2073,72 @@ function filterSettlementStatementJobs(jobs, includeDirectCollection) {
 
 function buildSettlementStatementReportData(includeDirectCollection) {
   const baseReport = buildSettlementReportData();
+  const filterBySite = (jobs) => (jobs || []).filter((job) => {
+    if (selectedSettlementStatementSite === "all") return true;
+    const siteName = String(job.siteName || "").trim();
+    return selectedSettlementStatementSite === "__unspecified__"
+      ? !siteName
+      : siteName === selectedSettlementStatementSite;
+  });
+
   if (!baseReport?.filters || baseReport.filters.customerId === "all") {
     return {
       ...baseReport,
-      jobs: (baseReport.jobs || []).slice(),
-      receivableJobs: (baseReport.receivableJobs || []).slice(),
-      payoutJobs: (baseReport.payoutJobs || []).slice()
+      jobs: filterBySite(baseReport.jobs),
+      equipmentJobs: filterBySite(baseReport.equipmentJobs),
+      dispatchJobs: filterBySite(baseReport.dispatchJobs),
+      linkedJobs: filterBySite(baseReport.linkedJobs),
+      receivableJobs: filterBySite(baseReport.receivableJobs),
+      payoutJobs: filterBySite(baseReport.payoutJobs)
     };
   }
 
   return {
     ...baseReport,
-    jobs: filterSettlementStatementJobs(baseReport.jobs || [], includeDirectCollection),
-    receivableJobs: filterSettlementStatementJobs(baseReport.receivableJobs || [], includeDirectCollection),
-    payoutJobs: (baseReport.payoutJobs || []).slice()
+    jobs: filterBySite(filterSettlementStatementJobs(baseReport.jobs || [], includeDirectCollection)),
+    equipmentJobs: filterBySite(baseReport.equipmentJobs),
+    dispatchJobs: filterBySite(baseReport.dispatchJobs),
+    linkedJobs: filterBySite(baseReport.linkedJobs),
+    receivableJobs: filterBySite(filterSettlementStatementJobs(baseReport.receivableJobs || [], includeDirectCollection)),
+    payoutJobs: filterBySite(baseReport.payoutJobs)
   };
+}
+
+function getSettlementStatementSiteOptions(report) {
+  const siteKeys = new Set();
+  (report.jobs || []).forEach((job) => {
+    const siteName = String(job.siteName || "").trim();
+    siteKeys.add(siteName || "__unspecified__");
+  });
+
+  return ["all", ...Array.from(siteKeys).sort((a, b) => {
+    if (a === "__unspecified__") return 1;
+    if (b === "__unspecified__") return -1;
+    return a.localeCompare(b, "ko");
+  })];
+}
+
+function buildSettlementStatementSiteSelection(report) {
+  const siteOptions = getSettlementStatementSiteOptions(report);
+  const optionLabels = {
+    all: "전체 현장",
+    __unspecified__: "현장 미지정"
+  };
+
+  return `
+    <div class="report-site-selection" role="dialog" aria-modal="true" aria-labelledby="statementSiteSelectionTitle">
+      <h3 id="statementSiteSelectionTitle">현장 선택</h3>
+      <p class="muted">출력할 현장을 선택해주세요.</p>
+      <div class="report-site-option-list">
+        ${siteOptions.map((siteKey) => `
+          <button type="button" class="report-site-option ${siteKey === selectedSettlementStatementSite ? "selected" : ""}" data-statement-site="${escapeHtml(siteKey)}">
+            ${escapeHtml(optionLabels[siteKey] || siteKey)}
+          </button>
+        `).join("")}
+      </div>
+      <button type="button" class="ghost-btn report-site-cancel-btn" data-statement-site-cancel>취소</button>
+    </div>
+  `;
 }
 
 function buildSettlementStatementHtml(report) {
@@ -2096,6 +2148,9 @@ function buildSettlementStatementHtml(report) {
   const periodLabel = report.filters.period === "custom"
     ? `${report.filters.range?.startKey || ""}${report.filters.range?.startKey && report.filters.range?.endKey ? " ~ " : ""}${report.filters.range?.endKey || ""}`
     : (report.filters.period === "this-month" ? "이번 달" : report.filters.period === "last-month" ? "지난 달" : report.filters.period === "this-year" ? "올해" : report.filters.period === "all" ? "전체" : "기간 선택");
+  const siteLabel = selectedSettlementStatementSite === "all"
+    ? "전체"
+    : selectedSettlementStatementSite === "__unspecified__" ? "현장 미지정" : selectedSettlementStatementSite;
 
   const issueDate = getToday();
   const pickCustomerField = (...values) => values.map((value) => String(value ?? "").trim()).find(Boolean) || "-";
@@ -2239,6 +2294,7 @@ function buildSettlementStatementHtml(report) {
             <h2>거래내역서</h2>
             <div class="statement-meta">
               <div>발행일자: ${escapeHtml(issueDate)}</div>
+              <div>현장명: ${escapeHtml(siteLabel)}</div>
               <div>조회기간: ${escapeHtml(periodLabel)}</div>
             </div>
           </header>
@@ -2469,6 +2525,27 @@ function openSettlementStatement() {
     return;
   }
 
+  selectedSettlementStatementSite = "all";
+  const modal = document.getElementById("settlementStatementModal");
+  const siteSelectionPanel = document.getElementById("statementSiteSelectionPanel");
+  const reportPanel = document.getElementById("statementReportPanel");
+  siteSelectionPanel.innerHTML = buildSettlementStatementSiteSelection(baseReport);
+  siteSelectionPanel.classList.remove("hidden");
+  reportPanel.classList.add("hidden");
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  return;
+}
+
+function showSettlementStatementReport() {
+  const baseReport = buildSettlementReportData();
+
+  if (!baseReport || baseReport.jobs.length === 0) {
+    closeSettlementStatement();
+    showToast("선택한 조건의 작업이 없어 출력할 수 없습니다.");
+    return;
+  }
+
   const showOption = shouldShowStatementDirectCollectionOption();
   includeDirectCollectionInStatement = showOption ? false : true;
   if (showOption) {
@@ -2479,8 +2556,8 @@ function openSettlementStatement() {
 
   const content = buildSettlementStatementHtml(currentSettlementReport);
   document.getElementById("settlementStatementContent").innerHTML = content;
-  document.getElementById("settlementStatementModal").classList.remove("hidden");
-  document.getElementById("settlementStatementModal").setAttribute("aria-hidden", "false");
+  document.getElementById("statementSiteSelectionPanel").classList.add("hidden");
+  document.getElementById("statementReportPanel").classList.remove("hidden");
   updateSettlementStatementPreviewScale();
 }
 
@@ -3455,6 +3532,15 @@ function initializeApp() {
   });
   document.getElementById("settlementStatementModal").addEventListener("click", (event) => {
     if (event.target.id === "settlementStatementModal") closeSettlementStatement();
+  });
+  document.getElementById("statementSiteSelectionPanel").addEventListener("click", (event) => {
+    const siteButton = event.target.closest("[data-statement-site]");
+    if (siteButton) {
+      selectedSettlementStatementSite = siteButton.dataset.statementSite || "all";
+      showSettlementStatementReport();
+      return;
+    }
+    if (event.target.closest("[data-statement-site-cancel]")) closeSettlementStatement();
   });
   window.addEventListener("resize", () => {
     updateSettlementStatementPreviewScale();

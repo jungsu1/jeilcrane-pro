@@ -1726,6 +1726,70 @@ body[data-theme="light"] .muted {
   color: #111827;
 }
 
+.report-site-selection-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.report-site-selection {
+  width: min(100%, 560px);
+  margin: 0 auto;
+  padding: 28px 20px 24px;
+  box-sizing: border-box;
+  color: #111827;
+}
+
+.report-site-selection h3 {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+}
+
+.report-site-selection p {
+  margin: 0 0 16px;
+}
+
+.report-site-option-list {
+  display: grid;
+  gap: 10px;
+  max-height: min(62dvh, 520px);
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.report-site-option {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #111827;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.report-site-option.selected,
+.report-site-option:hover,
+.report-site-option:focus-visible {
+  border-color: #7654f6;
+  background: #eef2ff;
+}
+
+.report-site-cancel-btn {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.statement-report-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .report-option-title {
   margin: 0 0 8px;
   font-size: 0.92rem;
