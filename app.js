@@ -2780,6 +2780,11 @@ function openSettlementStatement() {
     return;
   }
 
+  if (selectedSettlementCustomer === "all" && !outstandingSettlementView && !payableSettlementView) {
+    showSettlementStatementReport();
+    return;
+  }
+
   selectedSettlementStatementSite = "all";
   const modal = document.getElementById("settlementStatementModal");
   const siteSelectionPanel = document.getElementById("statementSiteSelectionPanel");
