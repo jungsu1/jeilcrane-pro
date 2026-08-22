@@ -3552,7 +3552,8 @@ function createBackupPayload() {
 function createBackupFile() {
   const payload = createBackupPayload();
   const fileName = `JEIL_PRO_BACKUP_${getToday()}.json`;
-  return new File([JSON.stringify(payload, null, 2)], fileName, { type: "application/json" });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  return new File([blob], fileName, { type: "application/json" });
 }
 
 function downloadBackupFile(file, message = "백업 파일이 생성되었습니다.") {
@@ -3578,8 +3579,8 @@ async function emailBackup() {
     text: `JEIL PRO 백업 파일입니다.\n백업 생성일시: ${payload.createdAt}`,
     files: [file]
   };
-  const canShareFiles = typeof navigator.canShare !== "function"
-    || navigator.canShare({ files: [file] });
+  const canShareFiles = typeof navigator.canShare === "function"
+    && navigator.canShare({ files: [file] });
 
   if (typeof navigator.share === "function" && canShareFiles) {
     try {
