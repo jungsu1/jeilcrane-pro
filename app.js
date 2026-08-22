@@ -3572,13 +3572,16 @@ function exportBackup() {
 
 async function emailBackup() {
   const file = createBackupFile();
+  const payload = createBackupPayload();
   const shareData = {
-    title: "JEIL PRO 데이터 백업",
-    text: "JEIL PRO 데이터 백업 파일입니다.",
+    title: "JEIL PRO 백업",
+    text: `JEIL PRO 백업 파일입니다.\n백업 생성일시: ${payload.createdAt}`,
     files: [file]
   };
+  const canShareFiles = typeof navigator.canShare !== "function"
+    || navigator.canShare({ files: [file] });
 
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (typeof navigator.share === "function" && canShareFiles) {
     try {
       await navigator.share(shareData);
       showToast("백업 파일 공유 창을 열었습니다.");
