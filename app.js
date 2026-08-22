@@ -2189,7 +2189,7 @@ function getStatementDirectCollectionOption() {
 }
 
 function shouldShowStatementDirectCollectionOption() {
-  return !outstandingSettlementView && !payableSettlementView && selectedSettlementCustomer !== "all";
+  return !outstandingSettlementView && !payableSettlementView;
 }
 
 function updateStatementDirectCollectionOptionVisibility() {
@@ -2225,11 +2225,11 @@ function buildSettlementStatementReportData(includeDirectCollection) {
   if (!statementBaseReport?.filters || statementBaseReport.filters.customerId === "all") {
     return {
       ...statementBaseReport,
-      jobs: filterBySite(statementBaseReport.jobs),
-      equipmentJobs: filterBySite(statementBaseReport.equipmentJobs),
+      jobs: filterBySite(filterSettlementStatementJobs(statementBaseReport.jobs || [], includeDirectCollection)),
+      equipmentJobs: filterBySite(filterSettlementStatementJobs(statementBaseReport.equipmentJobs || [], includeDirectCollection)),
       dispatchJobs: filterBySite(statementBaseReport.dispatchJobs),
       linkedJobs: filterBySite(statementBaseReport.linkedJobs),
-      receivableJobs: filterBySite(statementBaseReport.receivableJobs),
+      receivableJobs: filterBySite(filterSettlementStatementJobs(statementBaseReport.receivableJobs || [], includeDirectCollection)),
       payoutJobs: filterBySite(statementBaseReport.payoutJobs)
     };
   }
@@ -2799,8 +2799,11 @@ function openSettlementStatement() {
 
 function showSettlementStatementReport() {
   const baseReport = buildSettlementReportData();
+  const statementReport = outstandingSettlementView
+    ? buildOutstandingSettlementReport(baseReport)
+    : payableSettlementView ? buildPayableSettlementReport(baseReport) : baseReport;
 
-  if (!baseReport || baseReport.jobs.length === 0) {
+  if (!statementReport || statementReport.jobs.length === 0) {
     closeSettlementStatement();
     showToast("선택한 조건의 작업이 없어 출력할 수 없습니다.");
     return;
@@ -2818,6 +2821,9 @@ function showSettlementStatementReport() {
   document.getElementById("settlementStatementContent").innerHTML = content;
   document.getElementById("statementSiteSelectionPanel").classList.add("hidden");
   document.getElementById("statementReportPanel").classList.remove("hidden");
+  const modal = document.getElementById("settlementStatementModal");
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
   updateSettlementStatementPreviewScale();
 }
 
