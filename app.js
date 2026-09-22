@@ -1994,7 +1994,8 @@ function buildSettlementTrendBarHeight(monthSales, maxSales) {
     return "0px";
   }
 
-  if (monthSales <= 0) {
+  if (monthSales <= 0) {2241
+equipmentJobs: filterBySite(filterSettlementStatementJobs(statementBaseReport.equipmentJobs || [], includeDirectCollection)),
     return "4px";
   }
 
