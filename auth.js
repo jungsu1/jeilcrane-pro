@@ -117,13 +117,23 @@ function bindBetaAuthUI() {
 function bootstrapBetaAuth() {
   bindBetaAuthUI();
 
+  // 기존에 이미 베타 인증을 완료한 기기만 계속 PWA를 사용할 수 있습니다.
   if (isBetaAuthorized()) {
     hideBetaAuthScreen();
     startAppAfterAuth();
     return;
   }
 
+  // 신규 접속자는 더 이상 베타 코드를 입력해 PWA를 시작할 수 없습니다.
   showBetaAuthScreen();
+  const description = document.querySelector(".beta-auth-description");
+  const form = document.getElementById("betaAuthForm");
+  if (description) {
+    description.textContent = "PWA 베타 신규 이용이 종료되었습니다. 정식 모두의장부 앱을 이용해주세요.";
+  }
+  if (form) {
+    form.style.display = "none";
+  }
 }
 
 window.jeilProBetaAuth = {
